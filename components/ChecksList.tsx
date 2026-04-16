@@ -39,7 +39,7 @@ export default function ChecksList({ checks }: ChecksListProps) {
           <div className="flex items-start gap-4">
             <div
               className={`mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-base font-bold ${getStatusStyles(
-                check.status
+                check.status,
               )}`}
             >
               {getStatusIcon(check.status)}
@@ -51,14 +51,18 @@ export default function ChecksList({ checks }: ChecksListProps) {
 
                 <span
                   className={`inline-flex w-fit rounded-full border px-3 py-1 text-sm font-medium ${getStatusStyles(
-                    check.status
+                    check.status,
                   )}`}
                 >
                   {getStatusLabel(check.status)}
                 </span>
               </div>
 
-              <p className="mt-3 text-slate-300">{check.description}</p>
+              <div className="mt-3 space-y-2">
+                <div>
+                  <p className="mt-1 text-slate-300">{check.description}</p>
+                </div>
+              </div>
 
               {check.fix && (
                 <div className="mt-4 rounded-xl bg-slate-800 p-4">

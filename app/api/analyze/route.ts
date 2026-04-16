@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     if (!rawUrl || typeof rawUrl !== "string") {
       return NextResponse.json(
         { error: "La URL es obligatoria." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -99,88 +99,88 @@ export async function POST(request: NextRequest) {
         title: "HTTPS activo",
         status: isHttps ? "pass" : "fail",
         description: isHttps
-          ? "La web usa HTTPS y cifra la conexión del visitante."
-          : "La web no parece estar usando HTTPS en la URL final.",
+          ? "Tu web usa una conexión segura, lo que ayuda a proteger la información del usuario."
+          : "Tu web no está usando una conexión segura en la URL final.",
         fix: isHttps
           ? null
-          : "Instala un certificado SSL y fuerza el uso de HTTPS.",
+          : "Activa HTTPS con un certificado SSL y configura la web para que cargue siempre en su versión segura.",
       },
       {
         key: "http-redirect",
         title: "Redirección de HTTP a HTTPS",
         status: redirectsToHttps ? "pass" : "warn",
         description: redirectsToHttps
-          ? "La versión insegura redirige correctamente a HTTPS."
-          : "No se pudo confirmar una redirección correcta de HTTP a HTTPS.",
+          ? "Si alguien entra por una versión insegura, tu web lo redirige correctamente a la versión segura."
+          : "No se ha podido confirmar que tu web redirija automáticamente desde HTTP a HTTPS.",
         fix: redirectsToHttps
           ? null
-          : "Configura una redirección permanente de HTTP a HTTPS en tu servidor.",
+          : "Configura una redirección automática de HTTP a HTTPS para que nadie entre por una versión insegura.",
       },
       {
         key: "hsts",
-        title: "Protección HSTS",
+        title: "Strict-Transport-Security",
         status: hsts ? "pass" : "warn",
         description: hsts
-          ? "La web obliga al navegador a priorizar conexiones seguras."
-          : "No se ha detectado la cabecera Strict-Transport-Security.",
+          ? "Tu web indica al navegador que debe usar siempre conexión segura."
+          : "Tu web no indica al navegador que recuerde usar siempre conexión segura.",
         fix: hsts
           ? null
-          : 'Añade la cabecera "Strict-Transport-Security" en tu servidor.',
+          : 'Añade la cabecera "Strict-Transport-Security" para reforzar el uso de HTTPS.',
       },
       {
         key: "csp",
-        title: "Content Security Policy",
+        title: "Content-Security-Policy",
         status: csp ? "pass" : "fail",
         description: csp
-          ? "La web define una política de seguridad para scripts y recursos."
-          : "No se ha detectado una política Content-Security-Policy.",
+          ? "Tu web limita mejor qué scripts y recursos pueden cargarse."
+          : "Tu web no tiene una política que limite scripts y recursos potencialmente peligrosos.",
         fix: csp
           ? null
-          : 'Configura una cabecera "Content-Security-Policy" básica.',
+          : 'Configura una cabecera "Content-Security-Policy" básica para reducir riesgos relacionados con scripts maliciosos.',
       },
       {
         key: "x-frame-options",
-        title: "Protección contra iframes maliciosos",
+        title: "X-Frame-Options",
         status: xFrameOptions ? "pass" : "warn",
         description: xFrameOptions
-          ? "La web limita cómo puede cargarse dentro de un iframe."
-          : "No se ha detectado la cabecera X-Frame-Options.",
+          ? "Tu web está protegida frente a que otras páginas intenten cargarla dentro de un iframe."
+          : "Tu web no indica si puede cargarse dentro de otras páginas, lo que puede dar pie a usos maliciosos.",
         fix: xFrameOptions
           ? null
-          : 'Añade la cabecera "X-Frame-Options" con valor "SAMEORIGIN" o "DENY".',
+          : 'Añade la cabecera "X-Frame-Options" con un valor como "SAMEORIGIN" o "DENY".',
       },
       {
         key: "x-content-type-options",
-        title: "Protección de tipos MIME",
+        title: "X-Content-Type-Options",
         status: xContentTypeOptions ? "pass" : "warn",
         description: xContentTypeOptions
-          ? "La web evita que el navegador interprete tipos de archivo de forma insegura."
-          : "No se ha detectado la cabecera X-Content-Type-Options.",
+          ? "Tu web evita que el navegador interprete ciertos archivos de una forma insegura."
+          : "Tu web no está indicando al navegador que trate algunos archivos de forma estricta.",
         fix: xContentTypeOptions
           ? null
-          : 'Añade la cabecera "X-Content-Type-Options" con valor "nosniff".',
+          : 'Añade la cabecera "X-Content-Type-Options" con el valor "nosniff".',
       },
       {
         key: "referrer-policy",
-        title: "Control del referrer",
+        title: "Referrer-Policy",
         status: referrerPolicy ? "pass" : "warn",
         description: referrerPolicy
-          ? "La web controla qué información de referencia comparte el navegador."
-          : "No se ha detectado una cabecera Referrer-Policy.",
+          ? "Tu web controla mejor qué información comparte el navegador al visitar otras páginas."
+          : "Tu web no está controlando qué información de navegación se comparte al salir hacia otras webs.",
         fix: referrerPolicy
           ? null
           : 'Añade una cabecera "Referrer-Policy", por ejemplo "strict-origin-when-cross-origin".',
       },
       {
         key: "permissions-policy",
-        title: "Control de permisos del navegador",
+        title: "Permissions-Policy",
         status: permissionsPolicy ? "pass" : "warn",
         description: permissionsPolicy
-          ? "La web limita permisos sensibles del navegador."
-          : "No se ha detectado una cabecera Permissions-Policy.",
+          ? "Tu web limita mejor permisos del navegador como cámara, micrófono o ubicación."
+          : "Tu web no define restricciones para algunos permisos sensibles del navegador.",
         fix: permissionsPolicy
           ? null
-          : 'Añade una cabecera "Permissions-Policy" para limitar funciones innecesarias.',
+          : 'Añade una cabecera "Permissions-Policy" para limitar funciones que no necesitas.',
       },
     ];
 
@@ -202,7 +202,7 @@ export async function POST(request: NextRequest) {
         error:
           "No se pudo analizar la web. Comprueba que la URL existe y responde correctamente.",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

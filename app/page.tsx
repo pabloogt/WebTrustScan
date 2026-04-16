@@ -43,14 +43,46 @@ const features = [
 ];
 
 const checksPreview = [
-  "HTTPS activo",
-  "Redirección de HTTP a HTTPS",
-  "Strict-Transport-Security",
-  "Content-Security-Policy",
-  "X-Frame-Options",
-  "X-Content-Type-Options",
-  "Referrer-Policy",
-  "Permissions-Policy",
+  {
+    title: "HTTPS activo",
+    description:
+      "Comprueba si la web usa una conexión segura para proteger los datos del usuario.",
+  },
+  {
+    title: "Redirección de HTTP a HTTPS",
+    description:
+      "Revisa si la versión insegura de la web redirige automáticamente a la versión segura.",
+  },
+  {
+    title: "Strict-Transport-Security",
+    description:
+      "Indica si el navegador debe recordar que esta web solo debe abrirse con conexión segura.",
+  },
+  {
+    title: "Content-Security-Policy",
+    description:
+      "Ayuda a limitar scripts y recursos peligrosos que podrían cargarse en la web.",
+  },
+  {
+    title: "X-Frame-Options",
+    description:
+      "Protege la web para que no pueda mostrarse dentro de páginas maliciosas.",
+  },
+  {
+    title: "X-Content-Type-Options",
+    description:
+      "Evita que el navegador interprete archivos de una forma insegura.",
+  },
+  {
+    title: "Referrer-Policy",
+    description:
+      "Controla qué información comparte el navegador cuando el usuario sale a otra web.",
+  },
+  {
+    title: "Permissions-Policy",
+    description:
+      "Limita permisos del navegador como cámara, micrófono o ubicación.",
+  },
 ];
 
 export default function Home() {
@@ -187,13 +219,22 @@ export default function Home() {
           </div>
 
           <div className="grid gap-3">
-            {checksPreview.map((item) => (
-              <div
-                key={item}
+            {checksPreview.map((item, index) => (
+              <details
+                key={index}
                 className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-200"
               >
-                {item}
-              </div>
+                <summary className="cursor-pointer font-medium list-none">
+                  <div className="flex items-center justify-between gap-3">
+                    <span>{item.title}</span>
+                    <span className="text-slate-500">+</span>
+                  </div>
+                </summary>
+
+                <p className="mt-3 text-slate-400 leading-6">
+                  {item.description}
+                </p>
+              </details>
             ))}
           </div>
         </div>
