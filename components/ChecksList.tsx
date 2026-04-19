@@ -17,9 +17,9 @@ function getStatusStyles(status: CheckStatus) {
 }
 
 function getStatusLabel(status: CheckStatus) {
-  if (status === "pass") return "Bien";
-  if (status === "warn") return "Mejorable";
-  return "Crítico";
+  if (status === "pass") return "Correcto";
+  if (status === "warn") return "A revisar";
+  return "Importante";
 }
 
 function getStatusIcon(status: CheckStatus) {

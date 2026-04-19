@@ -19,26 +19,51 @@ type AuditResult = {
 };
 
 function calculateScore(checks: AuditCheck[]) {
+  const weights: Record<string, number> = {
+    https: 20,
+    "http-redirect": 10,
+    hsts: 10,
+    csp: 12,
+    "x-frame-options": 10,
+    "x-content-type-options": 10,
+    "referrer-policy": 8,
+    "permissions-policy": 8,
+  };
+
+  const maxScore = Object.values(weights).reduce(
+    (sum, value) => sum + value,
+    0,
+  );
+
   let score = 0;
 
   for (const check of checks) {
-    if (check.status === "pass") score += 14;
-    if (check.status === "warn") score += 7;
+    const weight = weights[check.key] ?? 0;
+
+    if (check.status === "pass") {
+      score += weight;
+    } else if (check.status === "warn") {
+      score += weight * 0.75;
+    }
   }
 
-  return Math.min(score, 100);
+  return Math.round((score / maxScore) * 100);
 }
 
 function buildSummary(score: number) {
   if (score >= 85) {
-    return "Tu web tiene una base bastante buena a nivel de seguridad básica.";
+    return "Tu web tiene una base bastante sólida en seguridad básica y transmite una buena sensación de confianza.";
   }
 
-  if (score >= 60) {
-    return "Tu web tiene una base aceptable, pero hay puntos importantes que deberías mejorar.";
+  if (score >= 70) {
+    return "Tu web tiene una base aceptable, aunque todavía hay varios puntos que conviene revisar.";
   }
 
-  return "Tu web muestra carencias básicas de seguridad y confianza que conviene corregir cuanto antes.";
+  if (score >= 50) {
+    return "Tu web cumple algunos mínimos, pero muestra varias carencias importantes en seguridad básica y configuración.";
+  }
+
+  return "Tu web presenta varias debilidades claras en seguridad básica y confianza. Conviene revisarla cuanto antes.";
 }
 
 async function checkHttpToHttpsRedirect(hostname: string) {
@@ -87,6 +112,18 @@ export async function POST(request: NextRequest) {
     const hsts = headers.get("strict-transport-security");
     const csp = headers.get("content-security-policy");
     const xFrameOptions = headers.get("x-frame-options");
+    const cspReportOnly = headers.get("content-security-policy-report-only");
+
+    function hasFrameAncestors(policy: string | null) {
+      if (!policy) return false;
+      return /(^|;)\s*frame-ancestors\s+/i.test(policy);
+    }
+    const hasFrameProtection =
+      Boolean(xFrameOptions) ||
+      hasFrameAncestors(csp) ||
+      hasFrameAncestors(cspReportOnly);
+    const hasEnforcedCsp = Boolean(csp);
+    const hasReportOnlyCsp = Boolean(cspReportOnly);
     const xContentTypeOptions = headers.get("x-content-type-options");
     const referrerPolicy = headers.get("referrer-policy");
     const permissionsPolicy = headers.get("permissions-policy");
@@ -121,8 +158,8 @@ export async function POST(request: NextRequest) {
         title: "Strict-Transport-Security",
         status: hsts ? "pass" : "warn",
         description: hsts
-          ? "Tu web indica al navegador que debe usar siempre conexión segura."
-          : "Tu web no indica al navegador que recuerde usar siempre conexión segura.",
+          ? "Tu web indica al navegador que debe usar siempre una conexión segura."
+          : "Tu web no indica al navegador que recuerde abrirse siempre con conexión segura.",
         fix: hsts
           ? null
           : 'Añade la cabecera "Strict-Transport-Security" para reforzar el uso de HTTPS.',
@@ -130,15 +167,19 @@ export async function POST(request: NextRequest) {
       {
         key: "csp",
         title: "Content-Security-Policy",
-        status: csp ? "pass" : "fail",
-        description: csp
-          ? "Tu web limita mejor qué scripts y recursos pueden cargarse."
-          : "Tu web no tiene una política que limite scripts y recursos potencialmente peligrosos.",
-        fix: csp
+        status: hasEnforcedCsp ? "pass" : "warn",
+        description: hasEnforcedCsp
+          ? "Tu web limita qué scripts y recursos pueden cargarse."
+          : hasReportOnlyCsp
+            ? "Tu web parece estar probando una política CSP, pero no aplicándola todavía de forma estricta."
+            : "Tu web no muestra una política CSP visible para limitar scripts y recursos.",
+        fix: hasEnforcedCsp
           ? null
-          : 'Configura una cabecera "Content-Security-Policy" básica para reducir riesgos relacionados con scripts maliciosos.',
+          : hasReportOnlyCsp
+            ? 'Si ya estás usando "Content-Security-Policy-Report-Only", el siguiente paso es aplicar una política CSP real.'
+            : 'Configura "Content-Security-Policy" para limitar scripts y recursos potencialmente peligrosos.',
       },
-      {
+      /*{
         key: "x-frame-options",
         title: "X-Frame-Options",
         status: xFrameOptions ? "pass" : "warn",
@@ -148,6 +189,17 @@ export async function POST(request: NextRequest) {
         fix: xFrameOptions
           ? null
           : 'Añade la cabecera "X-Frame-Options" con un valor como "SAMEORIGIN" o "DENY".',
+      },*/
+      {
+        key: "frame-protection",
+        title: "Protección frente a iframes externos",
+        status: hasFrameProtection ? "pass" : "warn",
+        description: hasFrameProtection
+          ? "Tu web define protección para limitar que otras páginas la carguen dentro de un iframe."
+          : "Tu web no muestra una protección clara frente a carga en iframes de otras páginas.",
+        fix: hasFrameProtection
+          ? null
+          : 'Añade "X-Frame-Options" o usa "frame-ancestors" dentro de Content-Security-Policy.',
       },
       {
         key: "x-content-type-options",
