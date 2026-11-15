@@ -58,11 +58,12 @@ describe("calibración · cookies (caso Amazon)", () => {
     expect(cookies[0]).toMatchObject({ secure: true, domain: "amazon.es" });
   });
 
-  it("un nombre que suena a sesión no basta: el valor debe parecer un identificador", () => {
+  it("un nombre que suena a sesión no basta: el valor debe tener longitud de identificador", () => {
     const [id, time] = parseCookies(AMAZON_COOKIES, NOW);
 
-    // "262-1234567-7654321" y "2082787201l" no son identificadores opacos.
-    expect(id.sessionLike).toBe(false);
+    // "262-1234567-7654321" (19 caracteres) puede ser un identificador:
+    // se señala como indicio. "2082787201l" (11) es demasiado corto.
+    expect(id.sessionSignal).toBe("hint");
     expect(time.sessionLike).toBe(false);
 
     const [opaque, known, csrf] = parseCookies(
@@ -97,8 +98,16 @@ describe("calibración · cookies (caso Amazon)", () => {
       "i18n-prefs",
       "lc-acbes",
     ]);
-    expect(finding(report, "cookies.httponly").status).toBe("not_applicable");
-    expect(finding(report, "cookies.samesite").status).toBe("pass");
+    // session-id lleva Secure pero no HttpOnly ni SameSite. Como «de sesión»
+    // es solo un indicio, ambos hallazgos van con confianza baja.
+    const httpOnly = finding(report, "cookies.httponly");
+    expect(httpOnly.status).toBe("fail");
+    expect(httpOnly.confidence).toBe("low");
+    expect(httpOnly.evidence.map((e) => e.value.split(" ")[0])).toEqual(["session-id"]);
+
+    const sameSite = finding(report, "cookies.samesite");
+    expect(sameSite.status).toBe("warning");
+    expect(sameSite.confidence).toBe("low");
   });
 
   it("una cookie con nombre sugerente y valor opaco se señala con confianza baja", async () => {
@@ -113,7 +122,7 @@ describe("calibración · cookies (caso Amazon)", () => {
 
     expect(httpOnly.status).toBe("fail");
     expect(httpOnly.confidence).toBe("low");
-    expect(httpOnly.description).toMatch(/no puede confirmarlo/);
+    expect(httpOnly.description).toMatch(/Es un indicio, no una certeza/);
   });
 });
 
@@ -153,20 +162,20 @@ describe("calibración · CSP (caso Amazon)", () => {
 
 describe("calibración · SRI", () => {
   it.each([
-    ["https://m.media-amazon.com/images/I/11J1WJh9jNL.js", "www.amazon.es", "first-party"],
-    ["https://github.githubassets.com/assets/app-0a1b2c3d4e.js", "github.com", "first-party"],
+    ["https://m.media-amazon.com/images/I/11J1WJh9jNL.js", "www.amazon.es", "same-brand"],
+    ["https://github.githubassets.com/assets/app-0a1b2c3d4e.js", "github.com", "same-brand"],
     ["https://static.ejemplo.com/app.js", "www.ejemplo.com", "first-party"],
     ["https://www.googletagmanager.com/gtag/js?id=GT-XXXX", "termlifepicks.com", "dynamic"],
     ["https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js", "termlifepicks.com", "dynamic"],
     ["https://fonts.googleapis.com/css2?family=Inter", "ejemplo.com", "dynamic"],
     ["https://js.stripe.com/v3/", "ejemplo.com", "dynamic"],
-    ["https://cdn.otro.net/widget.js", "ejemplo.com", "dynamic"],
+    ["https://cdn.otro.net/widget.js", "ejemplo.com", "unknown"],
     ["https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.min.js", "ejemplo.com", "pinned"],
     ["https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js", "ejemplo.com", "pinned"],
     ["https://code.jquery.com/jquery-3.7.1.min.js", "ejemplo.com", "pinned"],
     ["https://cdn.otro.net/build/app.9f8e7d6c5b.js", "ejemplo.com", "pinned"],
     // Marca demasiado corta para deducir parentesco.
-    ["https://cdn.abcd-x.net/a.js", "abc.com", "dynamic"],
+    ["https://cdn.abcd-x.net/a.js", "abc.com", "unknown"],
   ])("%s en %s → %s", (url, host, expected) => {
     expect(classifyResource(url, host)).toBe(expected);
   });
@@ -187,7 +196,7 @@ describe("calibración · SRI", () => {
 
     expect(sri.status).toBe("info");
     expect(sri.credit).toBeNull();
-    expect(sri.description).toMatch(/SRI no se puede aplicar/);
+    expect(sri.description).toMatch(/a los que SRI no se puede aplicar/);
     // Las URL aparecen como evidencia y con las entidades HTML decodificadas.
     expect(sri.evidence.map((e) => e.value)).toEqual([
       "https://www.googletagmanager.com/gtag/js?id=GT-XXXX",
@@ -234,7 +243,7 @@ describe("calibración · correo y DNS", () => {
 
     const silent = finding(await scan(target, zone("v=DMARC1; p=none;")), "email.dmarc");
     expect(silent.credit).toBe(0.25);
-    expect(silent.description).toMatch(/no protege ni informa/);
+    expect(silent.description).toMatch(/no especifica ninguna dirección/);
 
     const monitoring = finding(
       await scan(target, zone("v=DMARC1; p=none; rua=mailto:d@lab.test")),
@@ -292,7 +301,7 @@ describe("calibración · puntuaciones con pocos controles", () => {
     expect(tls.status).toBe("fail");
     expect(tls.severity).toBe("low");
     expect(tls.confidence).toBe("high");
-    expect(tls.description).toMatch(/clientes antiguos/);
+    expect(tls.description).toMatch(/cliente antiguo/);
     expect(tls.evidence.some((e) => e.value.startsWith("openssl s_client"))).toBe(true);
   });
 });

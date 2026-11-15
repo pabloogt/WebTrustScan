@@ -1,5 +1,7 @@
 # COST_ANALYSIS — Infraestructura y costes
 
+> **PLANIFICACIÓN POSPUESTA (15-11-2026).** Este documento recoge ideas y análisis para una posible evolución comercial. **No describe el estado actual del producto ni autoriza a desarrollarlo.** Las cuentas están implementadas pero desactivadas por defecto; pagos, suscripciones, monitorización, alertas y gestión de clientes no están implementados; no hay ningún servicio externo contratado ni conectado. Estado real: `HANDOFF.md` y `AUTH_STORAGE_AUDIT.md`.
+
 **Aviso:** las cifras de proveedores proceden de búsquedas hechas el 15 de noviembre de 2026, en parte de fuentes secundarias. Están marcadas con su fuente; **confírmalas en la página oficial antes de decidir**. No se ha contratado ni configurado nada.
 
 ## 1. Qué consume un análisis

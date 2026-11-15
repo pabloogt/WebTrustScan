@@ -7,7 +7,13 @@ import {
   type RGB,
 } from "pdf-lib";
 import { CATEGORY_LABELS, REPORT_LABELS } from "../engine/catalog";
-import { categoryResult, controlCounts } from "../engine/format";
+import {
+  COVERAGE_LABEL,
+  MAIL_SCOPE_NOTE,
+  SCORE_NOTES,
+  categoryResult,
+  controlCounts,
+} from "../engine/format";
 import type {
   AuditReport,
   CheckStatus,
@@ -134,6 +140,8 @@ type TextOptions = {
   indent?: number;
   width?: number;
   lineGap?: number;
+  /** No partir el párrafo entre dos páginas (si cabe en una). */
+  together?: boolean;
 };
 
 class Writer {
@@ -203,7 +211,13 @@ class Writer {
     const width = options.width ?? CONTENT_WIDTH - indent;
     const leading = size + (options.lineGap ?? 4);
 
-    for (const line of this.wrap(value, font, size, width)) {
+    const lines = this.wrap(value, font, size, width);
+
+    if (options.together && lines.length * leading < 400) {
+      this.ensure(lines.length * leading);
+    }
+
+    for (const line of lines) {
       this.ensure(leading);
       this.y -= leading;
       this.page.drawText(line, {
@@ -229,7 +243,8 @@ class Writer {
   }
 
   heading(value: string): void {
-    this.ensure(46);
+    // Un título nunca se queda solo al pie: reserva sitio para su contenido.
+    this.ensure(120);
     this.y -= 14;
     this.text(value, { font: this.fonts.bold, size: 14, color: COLOR.ink });
     this.rule();
@@ -386,7 +401,7 @@ function scoreCard(
   }
 
   const facts = [
-    `Cobertura ${score.coverage}% · Confianza ${CONFIDENCE_LABEL[score.confidence].split(" ")[0]}`,
+    `${COVERAGE_LABEL}: ${score.coverage}% · Confianza ${CONFIDENCE_LABEL[score.confidence].split(" ")[0]}`,
     controlCounts(score),
   ];
 
@@ -431,9 +446,15 @@ function categoryTable(writer: Writer, report: AuditReport): void {
 
   writer.space(4);
   writer.text(
-    "Solo se da un porcentaje en las categorías con tres o más controles evaluados; con menos, un porcentaje sería engañoso.",
+    "La puntuación ponderada solo se da en las categorías con tres o más controles evaluados. No es el porcentaje de controles correctos: depende del peso de cada control.",
     { size: 8, color: COLOR.muted },
   );
+
+  writer.heading("Cómo leer estas cifras");
+  for (const note of SCORE_NOTES) {
+    writer.text(`• ${note}`, { size: 8.5, color: COLOR.text, together: true });
+    writer.space(2);
+  }
 }
 
 function findingBlock(writer: Writer, finding: Finding, detailed: boolean): void {
@@ -478,6 +499,14 @@ function findingBlock(writer: Writer, finding: Finding, detailed: boolean): void
     writer.text("Evidencia", { size: 8, font: fonts.bold, color: COLOR.muted });
 
     for (const item of finding.evidence.slice(0, 8)) {
+      // La etiqueta y su valor no se separan en un salto de página.
+      const valueLines = writer.wrap(
+        item.value.slice(0, 600),
+        fonts.mono,
+        8,
+        CONTENT_WIDTH - 16,
+      ).length;
+      writer.ensure(12 + Math.min(valueLines, 12) * 11);
       writer.text(`${item.label}:`, { size: 8, color: COLOR.muted, indent: 8 });
       writer.text(item.value.slice(0, 600), {
         size: 8,
@@ -494,13 +523,33 @@ function findingBlock(writer: Writer, finding: Finding, detailed: boolean): void
 
 function compactList(writer: Writer, findings: Finding[]): void {
   for (const finding of findings) {
-    writer.ensure(26);
+    // Título y descripción de un control no se separan entre páginas.
+    writer.ensure(
+      18 + writer.wrap(finding.description, writer.fonts.regular, 8.5, CONTENT_WIDTH).length * 12.5,
+    );
     writer.text(`${finding.title}  —  ${STATUS_LABEL[finding.status]}`, {
       size: 9.5,
       font: writer.fonts.bold,
       color: COLOR.ink,
     });
     writer.text(finding.description, { size: 8.5, color: COLOR.muted });
+
+    // En controles informativos o no comprobados la evidencia aporta el
+    // detalle (p. ej. las URL de los scripts de terceros).
+    if (finding.status !== "pass" && finding.status !== "not_applicable") {
+      for (const item of finding.evidence
+        .filter((entry) => entry.value !== "(no enviada)")
+        .slice(0, 4)) {
+        writer.text(`${item.label}: ${item.value.slice(0, 300)}`, {
+          size: 7.5,
+          font: writer.fonts.mono,
+          indent: 10,
+          lineGap: 3,
+          color: COLOR.muted,
+        });
+      }
+    }
+
     writer.space(3);
   }
 }
@@ -524,6 +573,15 @@ function reportSection(writer: Writer, report: AuditReport, id: ReportId): void 
   );
 
   writer.heading(`${REPORT_LABELS[id]} · hallazgos (${open.length})`);
+
+  if (id === "dns-email") {
+    writer.text(MAIL_SCOPE_NOTE, {
+      size: 9,
+      font: writer.fonts.bold,
+      color: hex("#92400e"),
+    });
+    writer.space(4);
+  }
   writer.text(score.summary, { size: 9.5, color: COLOR.muted });
   writer.space(4);
 
@@ -617,7 +675,7 @@ export async function buildReportPdf(
 
   writer.heading("Alcance y límites");
   writer.text(
-    "Este informe evalúa la configuración de seguridad observable desde fuera, sin autenticarse y con un máximo de cinco peticiones inocuas. No es una prueba de intrusión ni una certificación: no analiza el código, la lógica de la aplicación, las zonas con inicio de sesión ni el contenido que la web genera con JavaScript. Una puntuación alta indica una buena configuración en los controles comprobados, no la ausencia de vulnerabilidades. Los hallazgos con confianza media o baja son indicios que conviene verificar.",
+    "Este informe evalúa la configuración de seguridad observable desde fuera, sin autenticarse y con un máximo de cinco peticiones inocuas más un saludo TLS por versión de protocolo. No es una prueba de intrusión ni una certificación: no analiza el código, la lógica de la aplicación, las zonas con inicio de sesión ni el contenido que la web genera con JavaScript. Una puntuación alta indica una buena configuración en los controles comprobados, no la ausencia de vulnerabilidades. Una cobertura del 100 % significa que se han evaluado todos los controles aplicables de este catálogo, no que se haya auditado toda la seguridad del dominio. Los hallazgos con confianza media o baja son indicios que conviene verificar.",
     { size: 9, color: COLOR.muted },
   );
 

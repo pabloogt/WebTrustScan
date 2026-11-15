@@ -1,10 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import AccessForm from "@/components/pro/AccessForm";
+
+import { accountsEnabled } from "@/lib/pro/config";
 
 export const metadata: Metadata = { title: "Acceso · WebTrustScan" };
 
 export default function AccessPage() {
+  // Las cuentas están desactivadas por defecto (ver lib/pro/config.ts).
+  if (!accountsEnabled()) notFound();
+
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-16 text-white">
       <div className="mx-auto w-full max-w-md">

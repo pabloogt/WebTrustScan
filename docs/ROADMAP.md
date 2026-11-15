@@ -1,5 +1,7 @@
 # ROADMAP
 
+> **PLANIFICACIÓN POSPUESTA (15-11-2026).** Este documento recoge ideas y análisis para una posible evolución comercial. **No describe el estado actual del producto ni autoriza a desarrollarlo.** Las cuentas están implementadas pero desactivadas por defecto; pagos, suscripciones, monitorización, alertas y gestión de clientes no están implementados; no hay ningún servicio externo contratado ni conectado. Estado real: `HANDOFF.md` y `AUTH_STORAGE_AUDIT.md`.
+
 Ordenado por dependencia y valor, no por fechas. Cada bloque indica qué necesita de ti antes de poder empezar.
 
 ## Hecho en esta fase (15 de noviembre de 2026)

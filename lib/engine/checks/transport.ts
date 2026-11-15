@@ -1,4 +1,4 @@
-import type { TlsInfo } from "../../audit/safeRequest";
+import type { TlsInfo, TlsProbeResult } from "../../audit/safeRequest";
 import {
   errored,
   fail,
@@ -7,8 +7,10 @@ import {
   pass,
   sameSite,
   warning,
+  TLS_VERSIONS,
   type Check,
   type ScanContext,
+  type TlsVersion,
 } from "../context";
 import { firstHeaderValue, parseHstsMaxAge } from "../parse/csp";
 import type { Evidence } from "../types";
@@ -156,6 +158,57 @@ function certificateCheck(context: ScanContext) {
   );
 }
 
+const TLS_LABEL: Record<TlsVersion, string> = {
+  TLSv1: "TLS 1.0",
+  "TLSv1.1": "TLS 1.1",
+  "TLSv1.2": "TLS 1.2",
+  "TLSv1.3": "TLS 1.3",
+};
+
+const OPENSSL_FLAG: Record<TlsVersion, string> = {
+  TLSv1: "-tls1 -cipher 'DEFAULT:@SECLEVEL=0'",
+  "TLSv1.1": "-tls1_1 -cipher 'DEFAULT:@SECLEVEL=0'",
+  "TLSv1.2": "-tls1_2",
+  "TLSv1.3": "-tls1_3",
+};
+
+function describeProbe(probe: TlsProbeResult): string {
+  if (probe.outcome === "accepted") return "aceptado (saludo completado)";
+
+  if (probe.outcome === "rejected") {
+    return probe.explicit
+      ? `rechazado (el servidor responde que no admite la versión: ${probe.reason})`
+      : `no completado (el servidor cortó el saludo sin indicar el motivo: ${probe.reason})`;
+  }
+
+  return probe.reason === "UNSUPPORTED_RUNTIME"
+    ? "no comprobable (el entorno del analizador no puede usar esta versión)"
+    : `no comprobable (la prueba no llegó a ser válida: ${probe.reason})`;
+}
+
+/** Una línea de evidencia por versión, más la de la conexión normal. */
+function tlsEvidence(context: ScanContext): Evidence[] {
+  const versions = context.tlsVersions;
+  const evidence: Evidence[] = [
+    { label: "Host", value: context.finalUrl.host },
+    {
+      label: "Conexión normal (cliente actual)",
+      value: `negocia ${context.primary.tls?.protocol ?? "versión desconocida"}${context.primary.tls?.cipher ? ` con ${context.primary.tls.cipher}` : ""}`,
+    },
+  ];
+
+  if (versions) {
+    for (const version of TLS_VERSIONS) {
+      evidence.push({
+        label: `Saludo solo con ${TLS_LABEL[version]}`,
+        value: describeProbe(versions[version]),
+      });
+    }
+  }
+
+  return evidence;
+}
+
 function tlsVersionCheck(context: ScanContext) {
   if (!context.isHttps) return NOT_HTTPS;
 
@@ -163,66 +216,90 @@ function tlsVersionCheck(context: ScanContext) {
 
   if (!protocol) return errored("No se pudo leer la versión de TLS negociada.");
 
-  const evidence = [
-    { label: "Protocolo negociado", value: protocol },
-    { label: "Cifrado", value: context.primary.tls?.cipher ?? "desconocido" },
-  ];
+  const evidence = tlsEvidence(context);
 
-  return protocol === "TLSv1.3" || protocol === "TLSv1.2"
-    ? pass(`La conexión usa ${protocol}, una versión actual.`, { evidence })
-    : fail(
-        `La mejor versión que ofrece el servidor es ${protocol}, un protocolo retirado por inseguro.`,
-        "Activa TLS 1.2 y TLS 1.3 en el servidor o en tu proveedor de hosting.",
-        { evidence },
-      );
+  if (protocol !== "TLSv1.3" && protocol !== "TLSv1.2") {
+    return fail(
+      `Con un cliente actual, el servidor negocia ${protocol}: no ofrece ninguna versión vigente de TLS.`,
+      "Activa TLS 1.2 y TLS 1.3 en el servidor o en tu proveedor de hosting.",
+      { evidence },
+    );
+  }
+
+  const tls13 = context.tlsVersions?.["TLSv1.3"];
+  const note =
+    protocol === "TLSv1.2" && tls13?.outcome === "rejected"
+      ? " El servidor no ofrece TLS 1.3; TLS 1.2 sigue siendo válido, pero conviene activar también la versión más reciente."
+      : "";
+
+  return pass(
+    `Con un cliente actual (como un navegador moderno) la conexión se establece con ${protocol}, una versión vigente.${note}`,
+    { evidence },
+  );
 }
 
 function legacyTlsCheck(context: ScanContext) {
-  if (!context.isHttps || !context.legacyTls) return NOT_HTTPS;
+  if (!context.isHttps || !context.tlsVersions) return NOT_HTTPS;
 
-  const protocol = context.primary.tls?.protocol;
+  const negotiated = context.primary.tls?.protocol;
 
-  if (protocol && protocol !== "TLSv1.3" && protocol !== "TLSv1.2") {
+  if (negotiated && negotiated !== "TLSv1.3" && negotiated !== "TLSv1.2") {
     return notApplicable(
       "El servidor ni siquiera ofrece una versión actual de TLS; ya está recogido en «Versión de TLS negociada».",
     );
   }
 
-  const probe = context.legacyTls;
+  const legacy = (["TLSv1", "TLSv1.1"] as const).map((version) => ({
+    version,
+    probe: context.tlsVersions![version],
+  }));
+  const accepted = legacy.filter(({ probe }) => probe.outcome === "accepted");
+  const untestable = legacy.filter(({ probe }) => probe.outcome === "error");
+  const evidence = tlsEvidence(context);
+  const list = (items: typeof legacy) =>
+    items.map(({ version }) => TLS_LABEL[version]).join(" y ");
 
-  if (probe.outcome === "accepted") {
+  if (accepted.length > 0) {
+    const rest = legacy.filter(({ probe }) => probe.outcome !== "accepted");
+    const others =
+      rest.length === 0
+        ? ""
+        : untestable.length > 0
+          ? ` ${list(rest)} no se ha podido comprobar.`
+          : ` ${list(rest)} no se ha aceptado.`;
+
     return fail(
-      `El servidor ha completado un saludo limitado a TLS 1.0–1.1 (negoció ${probe.protocol ?? "una de ellas"}), versiones retiradas en 2021 (RFC 8996). Los navegadores actuales no las usan, así que el riesgo práctico se limita a clientes antiguos; aun así, normas como PCI DSS exigen desactivarlas.`,
-      "Desactiva TLS 1.0 y TLS 1.1 y deja solo TLS 1.2 y 1.3. Si das servicio a dispositivos muy antiguos, valora antes el impacto.",
+      `El servidor todavía acepta conexiones con ${list(accepted)}, ${accepted.length > 1 ? "versiones retiradas" : "una versión retirada"} en 2021 (RFC 8996).${others} Esto no cambia cómo conectan los navegadores actuales, que con este servidor negocian ${negotiated ?? "una versión vigente"}: solo un cliente antiguo, o uno forzado a bajar de versión, usaría ${accepted.length > 1 ? "esas versiones" : "esa versión"}. Normas como PCI DSS exigen desactivarlas.`,
+      "Desactiva TLS 1.0 y TLS 1.1 y deja TLS 1.2 y 1.3. Si das servicio a dispositivos muy antiguos, valora antes el impacto.",
       {
         evidence: [
-          { label: "Host", value: context.finalUrl.host },
-          {
-            label: "Saludo TLS limitado a 1.0–1.1",
-            value: `aceptado (${probe.protocol ?? "versión no informada"})`,
-          },
-          {
-            label: "Cómo comprobarlo",
-            value: `openssl s_client -connect ${context.finalUrl.hostname}:443 -servername ${context.finalUrl.hostname} -tls1_1 -cipher 'DEFAULT:@SECLEVEL=0'`,
-          },
+          ...evidence,
+          ...accepted.map(({ version }) => ({
+            label: `Cómo reproducirlo (${TLS_LABEL[version]})`,
+            value: `openssl s_client -connect ${context.finalUrl.hostname}:443 -servername ${context.finalUrl.hostname} ${OPENSSL_FLAG[version]}`,
+          })),
         ],
       },
     );
   }
 
-  if (probe.outcome === "rejected") {
-    return pass("El servidor rechaza TLS 1.0 y TLS 1.1.", {
-      evidence: [
-        { label: "Saludo TLS 1.0–1.1", value: `rechazado (${probe.reason})` },
-      ],
-    });
+  if (untestable.length > 0) {
+    // Un fallo del cliente o de la red no demuestra nada sobre el servidor.
+    return notTested(
+      `No se ha podido realizar una prueba válida de ${list(untestable)}, así que no se puede afirmar si el servidor ${untestable.length > 1 ? "las" : "la"} acepta o ${untestable.length > 1 ? "las" : "la"} rechaza. No se penaliza.`,
+      { evidence },
+    );
   }
 
-  return notTested(
-    probe.reason === "UNSUPPORTED_RUNTIME"
-      ? "El entorno del analizador no permite intentar conexiones con TLS 1.0/1.1, así que no se ha podido comprobar."
-      : "No se ha podido completar la prueba de protocolos TLS antiguos.",
-    { evidence: [{ label: "Motivo", value: probe.reason }] },
+  const explicit = legacy.every(
+    ({ probe }) => probe.outcome === "rejected" && probe.explicit,
+  );
+
+  return pass(
+    explicit
+      ? "El servidor rechaza TLS 1.0 y TLS 1.1: responde que no admite esas versiones."
+      : "El servidor no ha completado ningún saludo con TLS 1.0 ni TLS 1.1. En algún caso cortó la conexión sin indicar el motivo, lo que es coherente con que no las admita.",
+    { evidence, confidence: explicit ? "high" : "medium" },
   );
 }
 
@@ -269,6 +346,16 @@ function httpRedirectCheck(context: ScanContext) {
   return pass("La versión http:// redirige a la versión segura.", { evidence });
 }
 
+const HSTS_BASE = '"Strict-Transport-Security: max-age=31536000"';
+
+/**
+ * Recomendación progresiva. `includeSubDomains` y `preload` nunca se
+ * sugieren como primer paso: obligan a que TODOS los subdominios funcionen
+ * por HTTPS, y eso no se puede comprobar desde un análisis de una sola web.
+ */
+const HSTS_ROLLOUT =
+  'Empieza con un valor corto para probar, por ejemplo "Strict-Transport-Security: max-age=86400" (un día), y cuando compruebes que todo funciona súbelo a un año ("max-age=31536000"). Añade "includeSubDomains" solo después de verificar que todos los subdominios, actuales y previstos, funcionan por HTTPS: con esa opción el navegador dejará de abrir por HTTP cualquier subdominio. "preload" es todavía más difícil de revertir y no es necesario.';
+
 function hstsCheck(context: ScanContext) {
   if (!context.isHttps) return NOT_HTTPS;
 
@@ -278,7 +365,6 @@ function hstsCheck(context: ScanContext) {
   const evidence = [
     { label: "strict-transport-security", value: raw ?? "(no enviada)" },
   ];
-  const example = '"Strict-Transport-Security: max-age=31536000; includeSubDomains"';
 
   if (!value) {
     // HSTS se aplica a todo el host, pero una página de bloqueo puede no
@@ -291,8 +377,8 @@ function hstsCheck(context: ScanContext) {
     }
 
     return fail(
-      "La web no envía Strict-Transport-Security: la primera visita de cada usuario puede ser interceptada antes de pasar a HTTPS.",
-      `Añade la cabecera ${example}.`,
+      "La web no envía Strict-Transport-Security. Sin ella, cuando alguien escribe la dirección sin «https://» o sigue un enlace http://, la primera petición viaja sin cifrar y podría ser interceptada antes de la redirección a HTTPS.",
+      HSTS_ROLLOUT,
       { evidence },
     );
   }
@@ -302,7 +388,7 @@ function hstsCheck(context: ScanContext) {
   if (maxAge === null) {
     return fail(
       "La cabecera Strict-Transport-Security no tiene un max-age válido, así que el navegador la ignora.",
-      `Usa ${example}.`,
+      `Usa ${HSTS_BASE}. ${HSTS_ROLLOUT}`,
       { evidence },
     );
   }
@@ -310,7 +396,7 @@ function hstsCheck(context: ScanContext) {
   if (maxAge === 0) {
     return fail(
       'La web envía Strict-Transport-Security con "max-age=0", que ordena al navegador OLVIDAR la protección.',
-      `Usa ${example}.`,
+      `Si no es intencionado (max-age=0 se usa para retirar HSTS), usa ${HSTS_BASE}.`,
       { evidence },
     );
   }
@@ -318,8 +404,8 @@ function hstsCheck(context: ScanContext) {
   if (maxAge < HSTS_MIN_MAX_AGE) {
     return warning(
       0.5,
-      `HSTS está activo, pero con una duración corta (max-age=${maxAge} s, unos ${Math.max(1, Math.round(maxAge / 86_400))} día(s)). Se recomienda al menos 6 meses.`,
-      `Sube max-age a un año: ${example}.`,
+      `HSTS está activo, pero con una duración corta (max-age=${maxAge} s, unos ${Math.max(1, Math.round(maxAge / 86_400))} día(s)). Es razonable mientras se prueba; para una protección estable se recomienda al menos 6 meses.`,
+      `Cuando hayas comprobado que todo funciona por HTTPS, sube la duración a un año: ${HSTS_BASE}.`,
       { evidence },
     );
   }
@@ -327,23 +413,18 @@ function hstsCheck(context: ScanContext) {
   const lower = value.toLowerCase();
   const includeSubDomains = /;\s*includesubdomains\b/.test(lower);
   const preload = /;\s*preload\b/.test(lower);
-  const notes: string[] = [];
+  let detail = includeSubDomains
+    ? " La cabecera incluye includeSubDomains, así que también se aplica a los subdominios."
+    : " Se aplica solo a este nombre de host: no incluye includeSubDomains, que es opcional y solo conviene añadir si todos los subdominios funcionan por HTTPS.";
 
-  if (!includeSubDomains) {
-    notes.push("no cubre subdominios (falta includeSubDomains)");
-  }
   if (preload && (!includeSubDomains || maxAge < HSTS_PRELOAD_MIN_MAX_AGE)) {
-    notes.push(
-      "declara preload sin cumplir sus requisitos (1 año e includeSubDomains)",
-    );
+    detail +=
+      ' Declara "preload" sin cumplir sus requisitos (un año e includeSubDomains), así que no tiene efecto.';
   }
 
-  return pass(
-    notes.length > 0
-      ? `HSTS está activo. Mejora opcional: ${notes.join("; ")}.`
-      : "HSTS está activo y cubre también los subdominios.",
-    { evidence },
-  );
+  return pass(`HSTS está activo con una duración suficiente.${detail}`, {
+    evidence,
+  });
 }
 
 export const transportChecks: Check[] = [

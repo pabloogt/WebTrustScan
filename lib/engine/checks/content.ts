@@ -133,30 +133,70 @@ function sriCheck(context: ScanContext) {
         ...resource,
         origin: classifyResource(resource.url, context.finalUrl.hostname),
       }));
-    const pinned = assets.filter((asset) => asset.origin === "pinned");
-    const dynamic = assets.filter((asset) => asset.origin === "dynamic");
+    const of = (origin: (typeof assets)[number]["origin"]) =>
+      assets.filter((asset) => asset.origin === origin);
+    const pinned = of("pinned");
+    const dynamic = of("dynamic");
+    const unknown = of("unknown");
+    const sameBrand = of("same-brand");
+    const hosts = (list: typeof assets) =>
+      [...new Set(list.map((asset) => asset.host))].slice(0, 4).join(", ");
 
-    if (pinned.length === 0 && dynamic.length === 0) {
+    // Lo que no puntúa también se enseña, con el motivo de su clasificación.
+    const context_ = [
+      ...dynamic.slice(0, 4).map((asset) => ({
+        label: "Servicio de contenido cambiante (SRI no aplicable)",
+        value: asset.url.slice(0, 200),
+      })),
+      ...unknown.slice(0, 4).map((asset) => ({
+        label: "Tercero sin versión visible en la URL (no se puede saber si es fijo)",
+        value: asset.url.slice(0, 200),
+      })),
+      ...(sameBrand.length > 0
+        ? [
+            {
+              label: "Dominios tratados como propios por su nombre (no verificado)",
+              value: hosts(sameBrand),
+            },
+          ]
+        : []),
+    ];
+    const brandNote =
+      sameBrand.length > 0
+        ? ` ${sameBrand.length} recurso(s) de ${hosts(sameBrand)} se han tratado como propios porque el nombre del dominio coincide con la marca del sitio; es un indicio, no una comprobación.`
+        : "";
+
+    if (pinned.length === 0 && dynamic.length === 0 && unknown.length === 0) {
       return notApplicable(
-        `La página no carga scripts ni estilos de otras organizaciones, así que no hay nada que verificar con SRI.${LIMIT_NOTE}`,
+        `La página no carga scripts ni estilos de otras organizaciones, así que no hay nada que verificar con SRI.${brandNote}${LIMIT_NOTE}`,
       );
     }
 
-    const dynamicEvidence = dynamic.slice(0, 5).map((asset) => ({
-      label: "Tercero sin versión fija (SRI no aplicable)",
-      value: asset.url.slice(0, 200),
-    }));
-
     if (pinned.length === 0) {
-      // Analítica, publicidad, pagos…: su código cambia y SRI los rompería.
-      // Es un riesgo de cadena de suministro asumido, no un fallo de
-      // configuración, así que se informa sin puntuar.
+      const parts: string[] = [];
+
+      if (dynamic.length > 0) {
+        parts.push(
+          `${dynamic.length} de servicios que cambian su código por diseño (analítica, publicidad, fuentes o similares), a los que SRI no se puede aplicar`,
+        );
+      }
+      if (unknown.length > 0) {
+        parts.push(
+          `${unknown.length} de terceros sin número de versión en la URL, de los que no se puede saber desde fuera si su contenido es fijo`,
+        );
+      }
+
+      // Sin evidencia de que SRI sea aplicable no se puntúa, pero tampoco se
+      // afirma que todo esté bien: se informa de lo que hay.
       return info(
-        `La página carga ${dynamic.length} script(s) o estilo(s) de terceros que cambian su contenido por diseño (analítica, publicidad, fuentes o similares). SRI no se puede aplicar a ese tipo de recurso, así que no se puntúa. Conviene saber que su código se ejecuta con los mismos permisos que el tuyo.`,
+        `La página carga scripts o estilos de otras organizaciones: ${parts.join("; ")}. Ninguno puede evaluarse con certeza para SRI, así que este control no puntúa. Su código se ejecuta con los mismos permisos que el de la propia web.${brandNote}`,
         {
-          evidence: dynamicEvidence,
+          evidence: context_,
+          confidence: "medium",
           remediation:
-            "Revisa periódicamente qué terceros cargas y limita con Content-Security-Policy los orígenes desde los que pueden ejecutarse scripts.",
+            unknown.length > 0
+              ? 'Si alguno de esos recursos es un fichero fijo (una librería concreta), cárgalo con una URL versionada y añade integrity="sha384-…" y crossorigin="anonymous". Limita con Content-Security-Policy los orígenes desde los que pueden ejecutarse scripts.'
+              : "Revisa periódicamente qué terceros cargas y limita con Content-Security-Policy los orígenes desde los que pueden ejecutarse scripts.",
         },
       );
     }
@@ -165,14 +205,14 @@ function sriCheck(context: ScanContext) {
 
     if (missing.length === 0) {
       return pass(
-        `Los ${pinned.length} recursos de terceros con versión fija llevan el atributo integrity.`,
-        { evidence: dynamicEvidence },
+        `Los ${pinned.length} recursos de terceros con versión fija llevan el atributo integrity.${brandNote}`,
+        { evidence: context_ },
       );
     }
 
     return warning(
       (pinned.length - missing.length) / pinned.length,
-      `${missing.length} de ${pinned.length} recursos de terceros con versión fija se cargan sin "integrity": si ese CDN fuera comprometido, el código modificado se ejecutaría en la web sin que el navegador lo detecte.`,
+      `${missing.length} de ${pinned.length} recursos de terceros con versión fija se cargan sin "integrity": si ese CDN fuera comprometido, el código modificado se ejecutaría en la web sin que el navegador lo detecte.${brandNote}`,
       'Añade integrity="sha384-…" y crossorigin="anonymous" a esas etiquetas (el propio CDN suele ofrecer el valor), o sirve los ficheros desde tu dominio.',
       {
         severity: "low",
@@ -183,7 +223,7 @@ function sriCheck(context: ScanContext) {
             label: "Sin integrity",
             value: asset.url.slice(0, 200),
           })),
-          ...dynamicEvidence,
+          ...context_,
         ],
       },
     );

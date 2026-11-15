@@ -10,6 +10,10 @@ import type { Plan, Role } from "@/lib/pro/plans";
 
 export const ORIGIN = "http://localhost";
 
+// Las cuentas están desactivadas por defecto; estas pruebas las activan
+// igual que lo haría el servidor (ver tests/pro/disabled.test.ts).
+process.env.ACCOUNTS_ENABLED = "true";
+
 /** PostgreSQL embebido en memoria, con las migraciones aplicadas. */
 export const createTestDb = (): Promise<Db> => createPgliteDb();
 

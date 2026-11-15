@@ -590,17 +590,37 @@ export async function fetchHeadersSafely(
 }
 
 export type TlsProbeResult =
+  /** El saludo se completó con esa versión. */
   | { outcome: "accepted"; protocol: string | null }
-  | { outcome: "rejected"; reason: string }
+  /**
+   * El servidor no completó el saludo. `explicit` indica si lo dijo con una
+   * alerta de versión de protocolo (concluyente) o si solo cortó el saludo
+   * (compatible con un rechazo, pero sin indicar el motivo).
+   */
+  | { outcome: "rejected"; reason: string; explicit: boolean }
+  /**
+   * La prueba no fue válida: fallo de red, tiempo agotado, destino bloqueado
+   * o un cliente que no puede hablar esa versión. NO dice nada del servidor.
+   */
   | { outcome: "error"; reason: string };
 
-/** Códigos con los que un servidor (o su pila TLS) rechaza una versión. */
-const TLS_VERSION_REJECTION =
-  /PROTOCOL_VERSION|UNSUPPORTED_PROTOCOL|HANDSHAKE_FAILURE|WRONG_VERSION|VERSION_TOO_LOW|NO_SHARED_CIPHER|INTERNAL_ERROR|ECONNRESET/i;
+/** El servidor responde que no admite la versión pedida. */
+const TLS_EXPLICIT_REJECTION =
+  /PROTOCOL_VERSION|UNSUPPORTED_PROTOCOL|VERSION_TOO_LOW/i;
+
+/** El servidor corta el saludo sin decir por qué. */
+const TLS_IMPLICIT_REJECTION =
+  /HANDSHAKE_FAILURE|NO_SHARED_CIPHER|INTERNAL_ERROR|ECONNRESET|EPIPE|socket hang up/i;
+
+/** El propio cliente no ha podido formular la prueba. */
+const TLS_CLIENT_LIMITATION =
+  /NO_PROTOCOLS_AVAILABLE|NO_CIPHERS_AVAILABLE|NO_CIPHER_MATCH|ERR_TLS_INVALID_PROTOCOL|ERR_TLS_PROTOCOL_VERSION_CONFLICT/i;
+
+const LEGACY_TLS = new Set(["TLSv1", "TLSv1.1"]);
 
 /**
- * Intenta un único saludo TLS limitado a un rango de versiones para saber si
- * el servidor todavía acepta protocolos obsoletos. No envía datos de
+ * Intenta un único saludo TLS limitado a un rango de versiones (normalmente
+ * una sola) para saber si el servidor la admite. No envía datos de
  * aplicación. Pasa por la misma validación de IP que las peticiones HTTP.
  */
 export function safeTlsProbe(
@@ -657,8 +677,10 @@ export function safeTlsProbe(
         minVersion: versions.minVersion,
         maxVersion: versions.maxVersion,
         // Las versiones antiguas requieren bajar el nivel de seguridad de
-        // OpenSSL SOLO en esta sonda, que no transmite ningún dato.
-        ciphers: "DEFAULT:@SECLEVEL=0",
+        // OpenSSL SOLO en su sonda, que no transmite ningún dato.
+        ...(LEGACY_TLS.has(versions.maxVersion)
+          ? { ciphers: "DEFAULT:@SECLEVEL=0" }
+          : {}),
       });
     } catch (error) {
       // El propio runtime no puede hablar esa versión: no es comprobable.
@@ -688,13 +710,20 @@ export function safeTlsProbe(
 
       if (error instanceof AuditError) {
         finish({ outcome: "error", reason: "BLOCKED" });
-      } else if (/NO_PROTOCOLS_AVAILABLE|NO_CIPHERS_AVAILABLE/i.test(reason)) {
+      } else if (TLS_CLIENT_LIMITATION.test(reason)) {
         finish({ outcome: "error", reason: "UNSUPPORTED_RUNTIME" });
-      } else if (TLS_VERSION_REJECTION.test(reason)) {
-        finish({ outcome: "rejected", reason });
+      } else if (TLS_EXPLICIT_REJECTION.test(reason)) {
+        finish({ outcome: "rejected", reason, explicit: true });
+      } else if (TLS_IMPLICIT_REJECTION.test(reason)) {
+        finish({ outcome: "rejected", reason, explicit: false });
       } else {
+        // DNS, red, etc.: la prueba no ha llegado a ser válida.
         finish({ outcome: "error", reason });
       }
+    });
+    // El servidor cierra antes de terminar el saludo y sin alerta.
+    connection.once("close", () => {
+      finish({ outcome: "rejected", reason: "CONNECTION_CLOSED", explicit: false });
     });
   });
 }

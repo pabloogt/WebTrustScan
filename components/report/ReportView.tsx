@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { REPORT_LABELS } from "@/lib/engine/catalog";
+import { MAIL_SCOPE_NOTE } from "@/lib/engine/format";
 import type { AuditReport, Finding, ReportId } from "@/lib/engine/types";
 import FindingCard from "./FindingCard";
 import { SEVERITY_LABEL, SEVERITY_ORDER, SEVERITY_STYLE } from "./labels";
@@ -389,6 +390,12 @@ export default function ReportView({ report }: { report: AuditReport }) {
           de la web: miden si alguien puede suplantar tu dominio al enviar
           correo. Tienen su propia nota y no alteran la de arriba.
         </p>
+        <p
+          role="note"
+          className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed text-amber-100"
+        >
+          {MAIL_SCOPE_NOTE}
+        </p>
         <ReportSection
           id="dns-email"
           report={report}
@@ -402,7 +409,7 @@ export default function ReportView({ report }: { report: AuditReport }) {
         <p className="mt-2">
           Este informe evalúa la configuración de seguridad observable desde
           fuera, sin autenticarse y con un máximo de cinco peticiones
-          inocuas. No es una prueba de intrusión ni una certificación: no
+          inocuas (más un saludo TLS por versión de protocolo). No es una prueba de intrusión ni una certificación: no
           analiza el código, la lógica de la aplicación, las zonas con inicio
           de sesión ni el contenido que la web genera con JavaScript. Una
           puntuación alta indica una buena configuración en los controles

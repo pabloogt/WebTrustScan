@@ -15,6 +15,8 @@ import {
   frameAncestors,
   parseCsp,
 } from "../parse/csp";
+import { siteOf } from "../parse/html";
+import { classifyResource } from "../parse/thirdParty";
 import type { Evidence } from "../types";
 
 const SAFE_REFERRER_POLICIES = new Set([
@@ -30,6 +32,48 @@ const LEAKY_REFERRER_POLICIES = new Set([
   "unsafe-url",
   "no-referrer-when-downgrade",
 ]);
+
+/**
+ * Recomendación de CSP adaptada a lo que carga la página. Nunca se propone
+ * aplicar una política restrictiva directamente: en sitios con plantillas,
+ * plugins, analítica o publicidad rompería funciones legítimas.
+ */
+function cspAdvice(context: ScanContext): string {
+  const page = context.finalUrl.hostname;
+  const resources = context.html?.resources ?? [];
+  const thirdParties = [
+    ...new Set(
+      resources
+        .filter(
+          (resource) =>
+            resource.kind !== "image" &&
+            resource.kind !== "media" &&
+            classifyResource(resource.url, page) !== "first-party",
+        )
+        .map((resource) => siteOf(resource.host)),
+    ),
+  ].slice(0, 6);
+  const wordpress = resources.some((resource) =>
+    /\/wp-(content|includes)\//.test(resource.url),
+  );
+  const parts = [
+    'No apliques una política restrictiva de golpe: puede bloquear funciones legítimas de la web. Publícala primero en modo de prueba con la cabecera "Content-Security-Policy-Report-Only", revisa durante unos días las infracciones que registra el navegador, ajústala y, cuando no afecte a nada legítimo, pásala a "Content-Security-Policy".',
+  ];
+
+  if (thirdParties.length > 0) {
+    parts.push(
+      `En esta página se cargan recursos de ${thirdParties.join(", ")}: la política tendrá que permitirlos, igual que los servicios, fuentes e imágenes externas que uses en otras páginas.`,
+    );
+  }
+
+  if (wordpress) {
+    parts.push(
+      "El sitio parece WordPress: la plantilla y los plugins suelen insertar scripts y estilos en línea, así que prueba la política con todos ellos activos antes de aplicarla.",
+    );
+  }
+
+  return parts.join(" ");
+}
 
 function cspCheck(context: ScanContext) {
   return htmlOnly(context, () => {
@@ -62,13 +106,13 @@ function cspCheck(context: ScanContext) {
       return reportOnly.length > 0
         ? warning(
             0.2,
-            "La web tiene una CSP solo en modo Report-Only: registra infracciones, pero no bloquea nada.",
-            'Cuando los informes estén limpios, publica la política en la cabecera "Content-Security-Policy".',
+            'La web publica una CSP solo en modo de prueba (cabecera "Content-Security-Policy-Report-Only"): el navegador registra lo que la política bloquearía, pero no bloquea nada. No hay ninguna CSP aplicada.',
+            'Es el primer paso correcto. Revisa las infracciones registradas y, cuando no afecten a nada legítimo, publica esa política también en la cabecera "Content-Security-Policy".',
             { evidence },
           )
         : fail(
             "La web no envía Content-Security-Policy. No es una vulnerabilidad por sí misma: es una capa de defensa que falta. Si la web tuviera un fallo de inyección (XSS), el navegador ejecutaría el script inyectado sin ninguna restricción.",
-            "Define una Content-Security-Policy. Un buen punto de partida es \"default-src 'self'; object-src 'none'; base-uri 'self'\" y scripts con nonce o hash.",
+            cspAdvice(context),
             { evidence },
           );
     }
@@ -83,8 +127,8 @@ function cspCheck(context: ScanContext) {
 
         return warning(
           0.25,
-          `La web aplica una CSP${source}, pero solo declara ${declared.map((name) => `"${name}"`).join(", ")}: ninguna de esas directivas limita desde dónde se ejecutan scripts, que es la función principal de CSP frente a XSS.${reportOnly.length > 0 ? " Además tiene una política más completa en modo Report-Only, que registra pero no bloquea." : ""}`,
-          'Añade "script-src" (o "default-src") a la política aplicada.',
+          `La web aplica una CSP${source}, pero solo declara ${declared.map((name) => `"${name}"`).join(", ")}: ninguna de esas directivas limita desde dónde se ejecutan scripts, que es la función principal de CSP frente a XSS.${reportOnly.length > 0 ? " Además publica otra política en modo Report-Only, que registra infracciones pero no bloquea nada." : ""}`,
+          `Para que la CSP proteja frente a XSS, la política aplicada necesita "script-src" (o "default-src"). ${cspAdvice(context)}`,
           { evidence, severity: "medium" },
         );
       }
@@ -92,7 +136,7 @@ function cspCheck(context: ScanContext) {
         return warning(
           0.5,
           `La web tiene una CSP${source}, pero ${scripts.issues.join(" y ")}. Eso anula buena parte de su protección frente a XSS.`,
-          "Sustituye 'unsafe-inline' y los comodines por nonces o hashes (con 'strict-dynamic' si cargas scripts de terceros).",
+          `El objetivo es sustituir 'unsafe-inline' y los comodines por nonces o hashes (con 'strict-dynamic' si cargas scripts de terceros). Hazlo por pasos: prueba la política más estricta en "Content-Security-Policy-Report-Only" mientras mantienes la actual, y cámbiala cuando no registre infracciones legítimas.`,
           { evidence, severity: "medium" },
         );
       case "eval-only":

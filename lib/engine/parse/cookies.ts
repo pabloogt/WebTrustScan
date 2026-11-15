@@ -1,8 +1,8 @@
 /**
  * Por qué se considera que una cookie puede ser de sesión:
  * - "known": su nombre es el de sesión de un framework conocido (PHPSESSID…).
- * - "hint": su nombre sugiere sesión/autenticación Y su valor es opaco
- *   (largo y de aspecto aleatorio), como el de un identificador.
+ * - "hint": su nombre sugiere sesión/autenticación Y su valor es lo bastante
+ *   largo como para ser un identificador.
  * Desde fuera y sin iniciar sesión no se puede saber con certeza: es una
  * heurística, y la confianza del hallazgo lo refleja.
  */
@@ -58,11 +58,13 @@ export function isSessionLikeName(name: string): boolean {
 }
 
 /**
- * Un identificador de sesión es largo y mezcla letras y cifras. Un valor
- * corto o puramente numérico (una fecha, un idioma) no lo es.
+ * Un identificador de sesión es largo. Un valor corto (un idioma, una fecha
+ * en segundos, un indicador) no puede serlo. No se exige mezcla de letras y
+ * cifras: hay identificadores solo numéricos o solo hexadecimales, y
+ * descartarlos cambiaría falsos positivos por falsos negativos.
  */
 export function looksOpaque(value: string): boolean {
-  return value.length >= 16 && /[a-z]/i.test(value) && /\d/.test(value);
+  return value.length >= 16;
 }
 
 /**
@@ -101,7 +103,10 @@ export function parseSetCookie(
   };
   cookie.sessionLike = cookie.sessionSignal !== null;
 
-  let deletion = value === "" || value === '""';
+  const empty = value === "" || value === '""';
+  // RFC 6265 §5.3: si hay Max-Age, Expires se ignora.
+  let expiredByDate = false;
+  let maxAge: number | null = null;
 
   for (const attribute of attributes) {
     const index = attribute.indexOf("=");
@@ -120,12 +125,14 @@ export function parseSetCookie(
     else if (key === "expires") {
       cookie.sessionLifetime = false;
       const expires = Date.parse(attributeValue);
-      if (!Number.isNaN(expires) && expires <= now.getTime()) deletion = true;
-    } else if (key === "max-age") {
+      if (!Number.isNaN(expires) && expires <= now.getTime()) expiredByDate = true;
+    } else if (key === "max-age" && /^-?\d+$/.test(attributeValue)) {
       cookie.sessionLifetime = false;
-      if (Number(attributeValue) <= 0) deletion = true;
+      maxAge = Number(attributeValue);
     }
   }
+
+  const deletion = empty || (maxAge !== null ? maxAge <= 0 : expiredByDate);
 
   return deletion ? null : cookie;
 }
@@ -163,7 +170,7 @@ export function describeCookie(cookie: ParsedCookie): string {
     cookie.sessionSignal === "known"
       ? " · nombre de sesión de un framework conocido"
       : cookie.sessionSignal === "hint"
-        ? " · el nombre sugiere sesión y el valor es opaco"
+        ? " · el nombre sugiere sesión y el valor tiene longitud de identificador"
         : "";
 
   return `${cookie.name}${scope} → ${flags.length > 0 ? flags.join("; ") : "sin Secure, HttpOnly ni SameSite"}${reason}`;

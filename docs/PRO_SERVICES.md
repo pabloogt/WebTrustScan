@@ -1,5 +1,7 @@
 # PRO_SERVICES — Servicios externos: opciones, costes y decisiones pendientes
 
+> **PLANIFICACIÓN POSPUESTA (15-11-2026).** Este documento recoge ideas y análisis para una posible evolución comercial. **No describe el estado actual del producto ni autoriza a desarrollarlo.** Las cuentas están implementadas pero desactivadas por defecto; pagos, suscripciones, monitorización, alertas y gestión de clientes no están implementados; no hay ningún servicio externo contratado ni conectado. Estado real: `HANDOFF.md` y `AUTH_STORAGE_AUDIT.md`.
+
 **Fecha:** 15 de noviembre de 2026. Las cifras proceden en su mayoría de comparativas de terceros; están enlazadas y **deben confirmarse en la página oficial de cada proveedor**. No se ha contratado, configurado ni dado de alta nada.
 
 ## Qué funciona hoy sin ningún servicio

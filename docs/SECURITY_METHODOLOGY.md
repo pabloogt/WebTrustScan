@@ -11,20 +11,20 @@ WebTrustScan es una **auditoría externa de configuración de seguridad**: obser
 | Nivel | Descripción | Autorización | Estado |
 |---|---|---|---|
 | **Pasivo** | Se deduce de la respuesta que recibiría cualquier navegador a una petición `GET` normal. | No requiere (equivale a visitar la web) | Implementado |
-| **Activo no intrusivo** | Una petición adicional, inocua y formulada a propósito: `GET` con cabecera `Origin`, `GET` a `http://`, `GET` a `/.well-known/security.txt`, un saludo TLS 1.0–1.1 sin datos. | No requiere; volumen mínimo y sin efectos | Implementado |
+| **Activo no intrusivo** | Una petición adicional, inocua y formulada a propósito: `GET` con cabecera `Origin`, `GET` a `http://`, `GET` a `/.well-known/security.txt`, un saludo TLS por versión de protocolo, sin datos. | No requiere; volumen mínimo y sin efectos | Implementado |
 | **Profundo** | Rutas sensibles conocidas (lista cerrada), métodos HTTP, rastreo limitado del propio dominio. | **Verificación de propiedad del dominio** | Diseñado, no implementado (Pro) |
 | **Autenticado** | Controles tras el inicio de sesión (cookies reales de sesión, CSRF, control de acceso). | Propiedad + credenciales de prueba | Fuera de alcance por ahora |
 | **Con acceso al código** | SAST, dependencias, secretos. | Acceso al repositorio | Fuera de alcance (otro producto) |
 
 ### Presupuesto de un análisis (nivel gratuito)
 
-Como máximo **5 peticiones HTTP al sitio** (verificado por test) y un saludo TLS:
+Como máximo **5 peticiones HTTP al sitio** (verificado por test) y cuatro saludos TLS:
 
 1. `GET` de la URL (hasta 5 redirecciones, 512 KB de cuerpo).
 2. `GET http://host/` — redirección a HTTPS.
 3. `GET` de la URL con `Origin: https://cors-probe.webtrustscan.invalid` — política CORS.
 4. `GET /.well-known/security.txt`.
-5. Saludo TLS limitado a 1.0–1.1 (sin petición HTTP).
+5. Un saludo TLS por versión (1.0, 1.1, 1.2 y 1.3), cada uno limitado a esa única versión y sin enviar ninguna petición HTTP. Sirven para saber qué versiones admite el servidor, que no es lo mismo que la que negocia un navegador actual.
 
 Más consultas DNS (MX, TXT, CAA) al resolvedor, que no tocan el sitio. Tiempos: 8 s por petición principal, 6 s por sonda, 20 s en total.
 

@@ -20,7 +20,7 @@ const NO_COOKIES = notApplicable(
  * ve la cookie que se emite al iniciar sesión.
  */
 const SCOPE_NOTE =
-  " Qué cookies son de sesión se deduce de su nombre y de que su valor parece un identificador; el análisis no inicia sesión, así que no puede confirmarlo.";
+  " Es un indicio, no una certeza: qué cookies son de sesión se deduce de su nombre y de la longitud de su valor. El análisis no inicia sesión, así que no puede confirmar para qué se usa cada una.";
 
 function evidenceOf(cookies: ParsedCookie[]): Evidence[] {
   return cookies

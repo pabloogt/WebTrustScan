@@ -1,0 +1,813 @@
+{
+  "engineVersion": "2.0.0",
+  "scannedAt": "2026-11-15T18:40:34.828Z",
+  "durationMs": 872,
+  "target": {
+    "input": "www.amazon.es",
+    "url": "https://www.amazon.es/",
+    "host": "www.amazon.es",
+    "httpStatus": 200,
+    "contentType": "text/html;charset=UTF-8",
+    "redirects": [
+      {
+        "url": "https://www.amazon.es/",
+        "status": 200
+      }
+    ],
+    "edge": "Amazon CloudFront",
+    "condition": "ok"
+  },
+  "notices": [
+    "La web se sirve a través de Amazon CloudFront. Las cabeceras analizadas son las que recibe un visitante; algunas pueden haberlas añadido la CDN y no el servidor de origen.",
+    "La página es muy grande: solo se han analizado sus primeros 512 KB."
+  ],
+  "web": {
+    "report": "web",
+    "score": 82,
+    "grade": "B",
+    "rawScore": 82,
+    "cap": null,
+    "coverage": 100,
+    "provisional": false,
+    "withheld": null,
+    "evaluated": 17,
+    "confidence": "high",
+    "categories": [
+      {
+        "category": "transport",
+        "label": "Cifrado y transporte",
+        "score": 93,
+        "scored": 6,
+        "passed": 5,
+        "notApplicable": 0,
+        "unverified": 0,
+        "total": 6
+      },
+      {
+        "category": "headers",
+        "label": "Protecciones del navegador",
+        "score": 66,
+        "scored": 4,
+        "passed": 3,
+        "notApplicable": 0,
+        "unverified": 0,
+        "total": 6
+      },
+      {
+        "category": "cookies",
+        "label": "Cookies y sesión",
+        "score": 59,
+        "scored": 3,
+        "passed": 0,
+        "notApplicable": 0,
+        "unverified": 0,
+        "total": 3
+      },
+      {
+        "category": "cors",
+        "label": "Acceso entre orígenes",
+        "score": null,
+        "scored": 1,
+        "passed": 1,
+        "notApplicable": 0,
+        "unverified": 0,
+        "total": 1
+      },
+      {
+        "category": "content",
+        "label": "Contenido de la página",
+        "score": null,
+        "scored": 2,
+        "passed": 2,
+        "notApplicable": 1,
+        "unverified": 0,
+        "total": 3
+      },
+      {
+        "category": "disclosure",
+        "label": "Exposición de información",
+        "score": null,
+        "scored": 1,
+        "passed": 1,
+        "notApplicable": 0,
+        "unverified": 0,
+        "total": 2
+      }
+    ],
+    "counts": {
+      "status": {
+        "pass": 12,
+        "fail": 2,
+        "warning": 3,
+        "info": 3,
+        "not_applicable": 1,
+        "not_tested": 0,
+        "error": 0
+      },
+      "severity": {
+        "critical": 0,
+        "high": 0,
+        "medium": 2,
+        "low": 3,
+        "info": 0
+      }
+    },
+    "summary": "La configuración de seguridad web es buena, con algunos puntos de mejora."
+  },
+  "dnsEmail": {
+    "report": "dns-email",
+    "score": 100,
+    "grade": "A",
+    "rawScore": 100,
+    "cap": null,
+    "coverage": 100,
+    "provisional": false,
+    "withheld": null,
+    "evaluated": 2,
+    "confidence": "high",
+    "categories": [
+      {
+        "category": "email",
+        "label": "Autenticación del correo",
+        "score": null,
+        "scored": 2,
+        "passed": 2,
+        "notApplicable": 0,
+        "unverified": 0,
+        "total": 2
+      },
+      {
+        "category": "dns",
+        "label": "DNS",
+        "score": null,
+        "scored": 0,
+        "passed": 0,
+        "notApplicable": 0,
+        "unverified": 0,
+        "total": 1
+      }
+    ],
+    "counts": {
+      "status": {
+        "pass": 2,
+        "fail": 0,
+        "warning": 0,
+        "info": 1,
+        "not_applicable": 0,
+        "not_tested": 0,
+        "error": 0
+      },
+      "severity": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0
+      }
+    },
+    "summary": "La autenticación del correo es sólida en los controles comprobados."
+  },
+  "findings": [
+    {
+      "id": "transport.https",
+      "report": "web",
+      "category": "transport",
+      "title": "HTTPS disponible",
+      "status": "pass",
+      "severity": "info",
+      "confidence": "high",
+      "credit": 1,
+      "weight": 10,
+      "description": "La web se sirve por HTTPS: la conexión va cifrada.",
+      "remediation": null,
+      "evidence": [
+        {
+          "label": "URL final",
+          "value": "https://www.amazon.es/"
+        }
+      ],
+      "references": [
+        "RFC 8996 (retirada de TLS 1.0/1.1) · OWASP WSTG-CRYP-01"
+      ],
+      "method": "passive"
+    },
+    {
+      "id": "transport.certificate",
+      "report": "web",
+      "category": "transport",
+      "title": "Certificado válido",
+      "status": "pass",
+      "severity": "info",
+      "confidence": "high",
+      "credit": 1,
+      "weight": 10,
+      "description": "El certificado es de confianza, corresponde al dominio y caduca en 129 días.",
+      "remediation": null,
+      "evidence": [
+        {
+          "label": "Emitido para",
+          "value": "www.amazon.es"
+        },
+        {
+          "label": "Nombres (SAN)",
+          "value": "DNS:amazon.es, DNS:www.amazon.es, DNS:origin-www.amazon.es, DNS:p-nt-www-amazon-es-kalias.amazon.es, DNS:p-yo-www-amazon-es-kalias.amazon.es, DNS:p-y3-www-amazon-es-kalias.amazon.es"
+        },
+        {
+          "label": "Emisor",
+          "value": "GeoTrust TLS RSA CA G1 · DigiCert Inc"
+        },
+        {
+          "label": "Válido desde",
+          "value": "Sep  8 00:00:00 2026 GMT"
+        },
+        {
+          "label": "Válido hasta",
+          "value": "Mar 24 23:59:59 2027 GMT"
+        }
+      ],
+      "references": [
+        "RFC 5280 · RFC 9525 · OWASP WSTG-CRYP-01"
+      ],
+      "method": "passive"
+    },
+    {
+      "id": "transport.tls-version",
+      "report": "web",
+      "category": "transport",
+      "title": "Versión de TLS negociada",
+      "status": "pass",
+      "severity": "info",
+      "confidence": "high",
+      "credit": 1,
+      "weight": 4,
+      "description": "Con un cliente actual (como un navegador moderno) la conexión se establece con TLSv1.3, una versión vigente.",
+      "remediation": null,
+      "evidence": [
+        {
+          "label": "Host",
+          "value": "www.amazon.es"
+        },
+        {
+          "label": "Conexión normal (cliente actual)",
+          "value": "negocia TLSv1.3 con TLS_AES_128_GCM_SHA256"
+        },
+        {
+          "label": "Saludo solo con TLS 1.0",
+          "value": "aceptado (saludo completado)"
+        },
+        {
+          "label": "Saludo solo con TLS 1.1",
+          "value": "aceptado (saludo completado)"
+        },
+        {
+          "label": "Saludo solo con TLS 1.2",
+          "value": "aceptado (saludo completado)"
+        },
+        {
+          "label": "Saludo solo con TLS 1.3",
+          "value": "aceptado (saludo completado)"
+        }
+      ],
+      "references": [
+        "RFC 8996 (retirada de TLS 1.0/1.1) · OWASP WSTG-CRYP-01"
+      ],
+      "method": "passive"
+    },
+    {
+      "id": "transport.legacy-tls",
+      "report": "web",
+      "category": "transport",
+      "title": "Protocolos TLS obsoletos",
+      "status": "fail",
+      "severity": "low",
+      "confidence": "high",
+      "credit": 0,
+      "weight": 3,
+      "description": "El servidor todavía acepta conexiones con TLS 1.0 y TLS 1.1, versiones retiradas en 2021 (RFC 8996). Esto no cambia cómo conectan los navegadores actuales, que con este servidor negocian TLSv1.3: solo un cliente antiguo, o uno forzado a bajar de versión, usaría esas versiones. Normas como PCI DSS exigen desactivarlas.",
+      "remediation": "Desactiva TLS 1.0 y TLS 1.1 y deja TLS 1.2 y 1.3. Si das servicio a dispositivos muy antiguos, valora antes el impacto.",
+      "evidence": [
+        {
+          "label": "Host",
+          "value": "www.amazon.es"
+        },
+        {
+          "label": "Conexión normal (cliente actual)",
+          "value": "negocia TLSv1.3 con TLS_AES_128_GCM_SHA256"
+        },
+        {
+          "label": "Saludo solo con TLS 1.0",
+          "value": "aceptado (saludo completado)"
+        },
+        {
+          "label": "Saludo solo con TLS 1.1",
+          "value": "aceptado (saludo completado)"
+        },
+        {
+          "label": "Saludo solo con TLS 1.2",
+          "value": "aceptado (saludo completado)"
+        },
+        {
+          "label": "Saludo solo con TLS 1.3",
+          "value": "aceptado (saludo completado)"
+        },
+        {
+          "label": "Cómo reproducirlo (TLS 1.0)",
+          "value": "openssl s_client -connect www.amazon.es:443 -servername www.amazon.es -tls1 -cipher 'DEFAULT:@SECLEVEL=0'"
+        },
+        {
+          "label": "Cómo reproducirlo (TLS 1.1)",
+          "value": "openssl s_client -connect www.amazon.es:443 -servername www.amazon.es -tls1_1 -cipher 'DEFAULT:@SECLEVEL=0'"
+        }
+      ],
+      "references": [
+        "RFC 8996 (retirada de TLS 1.0/1.1) · OWASP WSTG-CRYP-01"
+      ],
+      "method": "active"
+    },
+    {
+      "id": "transport.http-redirect",
+      "report": "web",
+      "category": "transport",
+      "title": "Redirección de HTTP a HTTPS",
+      "status": "pass",
+      "severity": "info",
+      "confidence": "high",
+      "credit": 1,
+      "weight": 6,
+      "description": "La versión http:// redirige a la versión segura.",
+      "remediation": null,
+      "evidence": [
+        {
+          "label": "Redirecciones",
+          "value": "http://www.amazon.es/ → https://www.amazon.es/"
+        }
+      ],
+      "references": [
+        "RFC 6797 · OWASP Secure Headers: Strict-Transport-Security"
+      ],
+      "method": "active"
+    },
+    {
+      "id": "transport.hsts",
+      "report": "web",
+      "category": "transport",
+      "title": "Strict-Transport-Security (HSTS)",
+      "status": "pass",
+      "severity": "info",
+      "confidence": "high",
+      "credit": 1,
+      "weight": 8,
+      "description": "HSTS está activo con una duración suficiente. La cabecera incluye includeSubDomains, así que también se aplica a los subdominios.",
+      "remediation": null,
+      "evidence": [
+        {
+          "label": "strict-transport-security",
+          "value": "max-age=47474747; includeSubDomains; preload"
+        }
+      ],
+      "references": [
+        "RFC 6797 · OWASP Secure Headers: Strict-Transport-Security"
+      ],
+      "method": "passive"
+    },
+    {
+      "id": "headers.csp",
+      "report": "web",
+      "category": "headers",
+      "title": "Content-Security-Policy",
+      "status": "warning",
+      "severity": "medium",
+      "confidence": "high",
+      "credit": 0.25,
+      "weight": 10,
+      "description": "La web aplica una CSP, pero solo declara \"upgrade-insecure-requests\", \"report-uri\": ninguna de esas directivas limita desde dónde se ejecutan scripts, que es la función principal de CSP frente a XSS. Además publica otra política en modo Report-Only, que registra infracciones pero no bloquea nada.",
+      "remediation": "Para que la CSP proteja frente a XSS, la política aplicada necesita \"script-src\" (o \"default-src\"). No apliques una política restrictiva de golpe: puede bloquear funciones legítimas de la web. Publícala primero en modo de prueba con la cabecera \"Content-Security-Policy-Report-Only\", revisa durante unos días las infracciones que registra el navegador, ajústala y, cuando no afecte a nada legítimo, pásala a \"Content-Security-Policy\". En esta página se cargan recursos de media-amazon.com: la política tendrá que permitirlos, igual que los servicios, fuentes e imágenes externas que uses en otras páginas.",
+      "evidence": [
+        {
+          "label": "content-security-policy",
+          "value": "upgrade-insecure-requests;report-uri https://metrics.media-amazon.com/"
+        },
+        {
+          "label": "content-security-policy-report-only",
+          "value": "default-src 'self' blob: https: data: mediastream: 'unsafe-eval' 'unsafe-inline';report-uri https://metrics.media-amazon.com/"
+        }
+      ],
+      "references": [
+        "W3C CSP Level 3 · OWASP WSTG-CONF-12 · ASVS 5.0 V3.4"
+      ],
+      "method": "passive"
+    },
+    {
+      "id": "headers.clickjacking",
+      "report": "web",
+      "category": "headers",
+      "title": "Protección frente a clickjacking",
+      "status": "pass",
+      "severity": "info",
+      "confidence": "high",
+      "credit": 1,
+      "weight": 6,
+      "description": "La web impide que otras páginas la incrusten (X-Frame-Options: SAMEORIGIN).",
+      "remediation": null,
+      "evidence": [
+        {
+          "label": "x-frame-options",
+          "value": "SAMEORIGIN"
+        },
+        {
+          "label": "content-security-policy",
+          "value": "upgrade-insecure-requests;report-uri https://metrics.media-amazon.com/"
+        }
+      ],
+      "references": [
+        "CSP3 frame-ancestors · RFC 7034 · OWASP WSTG-CLNT-09"
+      ],
+      "method": "passive"
+    },
+    {
+      "id": "headers.nosniff",
+      "report": "web",
+      "category": "headers",
+      "title": "X-Content-Type-Options",
+      "status": "pass",
+      "severity": "info",
+      "confidence": "high",
+      "credit": 1,
+      "weight": 4,
+      "description": "El navegador respeta el tipo declarado de cada archivo.",
+      "remediation": null,
+      "evidence": [
+        {
+          "label": "x-content-type-options",
+          "value": "nosniff"
+        }
+      ],
+      "references": [
+        "WHATWG Fetch (X-Content-Type-Options) · ASVS 5.0 V3.4"
+      ],
+      "method": "passive"
+    },
+    {
+      "id": "headers.referrer-policy",
+      "report": "web",
+      "category": "headers",
+      "title": "Referrer-Policy",
+      "status": "info",
+      "severity": "info",
+      "confidence": "high",
+      "credit": null,
+      "weight": 2,
+      "description": "La web no define Referrer-Policy. Los navegadores actuales aplican por defecto \"strict-origin-when-cross-origin\", que ya es razonable, así que no se penaliza.",
+      "remediation": "Usa \"Referrer-Policy: strict-origin-when-cross-origin\" (o \"no-referrer\" si no necesitas analítica de procedencia).",
+      "evidence": [
+        {
+          "label": "referrer-policy",
+          "value": "(no enviada)"
+        }
+      ],
+      "references": [
+        "W3C Referrer Policy · ASVS 5.0 V3.4"
+      ],
+      "method": "passive"
+    },
+    {
+      "id": "headers.permissions-policy",
+      "report": "web",
+      "category": "headers",
+      "title": "Permissions-Policy",
+      "status": "pass",
+      "severity": "info",
+      "confidence": "high",
+      "credit": 1,
+      "weight": 2,
+      "description": "La web restringe funciones sensibles del navegador.",
+      "remediation": null,
+      "evidence": [
+        {
+          "label": "permissions-policy",
+          "value": "ch-dpr=(self \"https://m.media-amazon.com\" \"https://images-eu.ssl-images-amazon.com\"), ch-viewport-width=(self \"https://m.media-amazon.com\" \"https://images-eu.ssl-images-amazon.com\"), ch-downlink=(self \"https://m.media-amazon.com\" \"https://images-eu.ssl-images-amazon.com\"), ch-ect=(self \"https://m.media-amazon.com\" \"https://images-eu.ssl-images-amazon.com\")"
+        }
+      ],
+      "references": [
+        "W3C Permissions Policy · OWASP Secure Headers"
+      ],
+      "method": "passive"
+    },
+    {
+      "id": "headers.cross-origin-isolation",
+      "report": "web",
+      "category": "headers",
+      "title": "Aislamiento entre orígenes (COOP/COEP/CORP)",
+      "status": "info",
+      "severity": "info",
+      "confidence": "high",
+      "credit": null,
+      "weight": 0,
+      "description": "La web no declara cabeceras de aislamiento entre orígenes. Solo son necesarias para funciones como SharedArrayBuffer o para aislar ventanas emergentes, así que no se puntúan.",
+      "remediation": null,
+      "evidence": [
+        {
+          "label": "cross-origin-opener-policy",
+          "value": "(no enviada)"
+        },
+        {
+          "label": "cross-origin-embedder-policy",
+          "value": "(no enviada)"
+        },
+        {
+          "label": "cross-origin-resource-policy",
+          "value": "(no enviada)"
+        }
+      ],
+      "references": [
+        "WHATWG HTML (COOP/COEP) · OWASP Secure Headers"
+      ],
+      "method": "passive"
+    },
+    {
+      "id": "cookies.secure",
+      "report": "web",
+      "category": "cookies",
+      "title": "Cookies con atributo Secure",
+      "status": "warning",
+      "severity": "low",
+      "confidence": "high",
+      "credit": 0.6,
+      "weight": 6,
+      "description": "2 de 4 cookies no llevan Secure (i18n-prefs, lc-acbes). No parecen de sesión (preferencias, idioma o similares), pero pueden viajar sin cifrar si alguna petición se hace por HTTP.",
+      "remediation": "Añade el atributo \"Secure\" a todas las cookies para que nunca viajen por HTTP.",
+      "evidence": [
+        {
+          "label": "Cookie",
+          "value": "i18n-prefs (dominio amazon.es) → sin Secure, HttpOnly ni SameSite"
+        },
+        {
+          "label": "Cookie",
+          "value": "lc-acbes (dominio amazon.es) → sin Secure, HttpOnly ni SameSite"
+        }
+      ],
+      "references": [
+        "RFC 6265bis · OWASP WSTG-SESS-02 · ASVS 5.0 V3.3"
+      ],
+      "method": "passive"
+    },
+    {
+      "id": "cookies.httponly",
+      "report": "web",
+      "category": "cookies",
+      "title": "Cookies de sesión con HttpOnly",
+      "status": "fail",
+      "severity": "medium",
+      "confidence": "low",
+      "credit": 0,
+      "weight": 6,
+      "description": "Hay cookies que podrían ser de sesión sin HttpOnly (session-id): si lo son, un script inyectado (XSS) podría leerlas. Es un indicio, no una certeza: qué cookies son de sesión se deduce de su nombre y de la longitud de su valor. El análisis no inicia sesión, así que no puede confirmar para qué se usa cada una.",
+      "remediation": "Añade el atributo \"HttpOnly\" a las cookies de sesión y autenticación. Si la cookie no identifica una sesión, puedes ignorar este aviso.",
+      "evidence": [
+        {
+          "label": "Cookie",
+          "value": "session-id (dominio amazon.es) → Secure · el nombre sugiere sesión y el valor tiene longitud de identificador"
+        }
+      ],
+      "references": [
+        "RFC 6265bis · OWASP WSTG-SESS-02 · ASVS 5.0 V3.3"
+      ],
+      "method": "passive"
+    },
+    {
+      "id": "cookies.samesite",
+      "report": "web",
+      "category": "cookies",
+      "title": "Cookies con SameSite",
+      "status": "warning",
+      "severity": "low",
+      "confidence": "low",
+      "credit": 0.5,
+      "weight": 3,
+      "description": "Hay cookies que podrían ser de sesión sin SameSite (session-id). Chrome y Edge aplican \"Lax\" por defecto; Firefox y Safari no en todos los casos, lo que deja más margen a ataques CSRF. Es un indicio, no una certeza: qué cookies son de sesión se deduce de su nombre y de la longitud de su valor. El análisis no inicia sesión, así que no puede confirmar para qué se usa cada una.",
+      "remediation": "Declara \"SameSite=Lax\" (o \"Strict\") en las cookies de sesión.",
+      "evidence": [
+        {
+          "label": "Cookie",
+          "value": "session-id (dominio amazon.es) → Secure · el nombre sugiere sesión y el valor tiene longitud de identificador"
+        }
+      ],
+      "references": [
+        "RFC 6265bis · OWASP WSTG-SESS-02 · ASVS 5.0 V3.3"
+      ],
+      "method": "passive"
+    },
+    {
+      "id": "cors.policy",
+      "report": "web",
+      "category": "cors",
+      "title": "Política CORS",
+      "status": "pass",
+      "severity": "info",
+      "confidence": "high",
+      "credit": 1,
+      "weight": 4,
+      "description": "El sitio no concede acceso a otros orígenes: se aplica la política del mismo origen del navegador.",
+      "remediation": null,
+      "evidence": [
+        {
+          "label": "Origin enviado",
+          "value": "https://cors-probe.webtrustscan.invalid"
+        },
+        {
+          "label": "access-control-allow-origin",
+          "value": "(no enviada)"
+        },
+        {
+          "label": "access-control-allow-credentials",
+          "value": "(no enviada)"
+        },
+        {
+          "label": "vary",
+          "value": "User-Agent,Accept-Encoding"
+        }
+      ],
+      "references": [
+        "WHATWG Fetch (CORS) · OWASP WSTG-CLNT-07 · ASVS 5.0 V3.4"
+      ],
+      "method": "active"
+    },
+    {
+      "id": "content.mixed-content",
+      "report": "web",
+      "category": "content",
+      "title": "Contenido mixto",
+      "status": "pass",
+      "severity": "info",
+      "confidence": "high",
+      "credit": 1,
+      "weight": 4,
+      "description": "Los 26 recursos referenciados en la página se cargan por HTTPS. (Se analiza el HTML que entrega el servidor; lo que la web genere después con JavaScript no se ve.)",
+      "remediation": null,
+      "evidence": [],
+      "references": [
+        "W3C Mixed Content · OWASP WSTG-CRYP-03"
+      ],
+      "method": "passive"
+    },
+    {
+      "id": "content.insecure-forms",
+      "report": "web",
+      "category": "content",
+      "title": "Formularios enviados sin cifrar",
+      "status": "pass",
+      "severity": "info",
+      "confidence": "high",
+      "credit": 1,
+      "weight": 6,
+      "description": "Los 2 formularios de la página envían sus datos por HTTPS.",
+      "remediation": null,
+      "evidence": [],
+      "references": [
+        "W3C Mixed Content · OWASP WSTG-CRYP-03"
+      ],
+      "method": "passive"
+    },
+    {
+      "id": "content.sri",
+      "report": "web",
+      "category": "content",
+      "title": "Integridad de recursos de terceros (SRI)",
+      "status": "not_applicable",
+      "severity": "info",
+      "confidence": "high",
+      "credit": null,
+      "weight": 2,
+      "description": "La página no carga scripts ni estilos de otras organizaciones, así que no hay nada que verificar con SRI. 10 recurso(s) de m.media-amazon.com se han tratado como propios porque el nombre del dominio coincide con la marca del sitio; es un indicio, no una comprobación. (Se analiza el HTML que entrega el servidor; lo que la web genere después con JavaScript no se ve.)",
+      "remediation": null,
+      "evidence": [],
+      "references": [
+        "W3C Subresource Integrity · ASVS 5.0 V3.6"
+      ],
+      "method": "passive"
+    },
+    {
+      "id": "disclosure.banner",
+      "report": "web",
+      "category": "disclosure",
+      "title": "Versiones de software expuestas",
+      "status": "pass",
+      "severity": "info",
+      "confidence": "high",
+      "credit": 1,
+      "weight": 1,
+      "description": "Las cabeceras no revelan versiones de software.",
+      "remediation": null,
+      "evidence": [
+        {
+          "label": "server",
+          "value": "Server"
+        }
+      ],
+      "references": [
+        "OWASP WSTG-INFO-02 · RFC 9110 §10.2.4"
+      ],
+      "method": "passive"
+    },
+    {
+      "id": "disclosure.security-txt",
+      "report": "web",
+      "category": "disclosure",
+      "title": "security.txt",
+      "status": "info",
+      "severity": "info",
+      "confidence": "high",
+      "credit": null,
+      "weight": 0,
+      "description": "La web no publica /.well-known/security.txt. Es opcional, pero facilita que alguien que encuentre un fallo sepa a quién avisar.",
+      "remediation": "Crea /.well-known/security.txt con al menos las líneas \"Contact:\" y \"Expires:\" (RFC 9116).",
+      "evidence": [
+        {
+          "label": "Respuesta",
+          "value": "HTTP 404"
+        }
+      ],
+      "references": [
+        "RFC 9116 (security.txt)"
+      ],
+      "method": "active"
+    },
+    {
+      "id": "email.spf",
+      "report": "dns-email",
+      "category": "email",
+      "title": "SPF",
+      "status": "pass",
+      "severity": "info",
+      "confidence": "high",
+      "credit": 1,
+      "weight": 5,
+      "description": "SPF está publicado y termina en \"-all\" (fail): declara que el correo enviado desde servidores no autorizados no es legítimo y pide a los receptores que lo rechacen.",
+      "remediation": null,
+      "evidence": [
+        {
+          "label": "Dominio",
+          "value": "amazon.es"
+        },
+        {
+          "label": "TXT",
+          "value": "v=spf1 include:amazon.com -all"
+        }
+      ],
+      "references": [
+        "RFC 7208 (SPF)"
+      ],
+      "method": "passive"
+    },
+    {
+      "id": "email.dmarc",
+      "report": "dns-email",
+      "category": "email",
+      "title": "DMARC",
+      "status": "pass",
+      "severity": "info",
+      "confidence": "high",
+      "credit": 1,
+      "weight": 6,
+      "description": "DMARC está publicado con política \"quarantine\": pide a los receptores que traten como sospechosos (normalmente, carpeta de spam) los mensajes que usan el dominio y no superan SPF ni DKIM.",
+      "remediation": null,
+      "evidence": [
+        {
+          "label": "Consulta",
+          "value": "_dmarc.amazon.es"
+        },
+        {
+          "label": "TXT",
+          "value": "v=DMARC1;p=quarantine;pct=100;rua=mailto:report@dmarc.amazon.com;ruf=mailto:report@dmarc.amazon.com"
+        }
+      ],
+      "references": [
+        "RFC 7489 (DMARC)"
+      ],
+      "method": "passive"
+    },
+    {
+      "id": "dns.caa",
+      "report": "dns-email",
+      "category": "dns",
+      "title": "Registros CAA",
+      "status": "info",
+      "severity": "info",
+      "confidence": "high",
+      "credit": null,
+      "weight": 0,
+      "description": "El dominio no publica registros CAA, así que cualquier autoridad de certificación reconocida puede emitir certificados para él. Es la situación por defecto y la de la mayoría de dominios: CAA es una medida opcional que reduce el riesgo de emisiones no deseadas, por lo que su ausencia no puntúa.",
+      "remediation": "Si quieres restringirlo, añade un registro CAA con tu autoridad, por ejemplo: 0 issue \"letsencrypt.org\".",
+      "evidence": [
+        {
+          "label": "CAA",
+          "value": "(sin registros)"
+        }
+      ],
+      "references": [
+        "RFC 8659 (CAA)"
+      ],
+      "method": "passive"
+    }
+  ]
+}

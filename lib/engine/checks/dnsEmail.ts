@@ -56,7 +56,7 @@ function spfCheck(context: ScanContext) {
     if (records.length === 0) {
       return hasMail
         ? fail(
-            `${dns.mailDomain} recibe correo pero no publica SPF: cualquiera puede enviar correos haciéndose pasar por este dominio con más facilidad.`,
+            `${dns.mailDomain} recibe correo pero no publica SPF: los servidores que reciben un mensaje no pueden comprobar si quien lo envía está autorizado por el dominio, lo que facilita la suplantación.`,
             'Publica un registro TXT SPF con tus servidores de envío, terminado en "-all" o "~all".',
             { evidence },
           )
@@ -114,10 +114,12 @@ function spfCheck(context: ScanContext) {
       );
     }
 
+    // "-all" (fail) y "~all" (softfail) NO son equivalentes: el primero pide
+    // rechazar; el segundo, aceptar pero tratar como sospechoso.
     return pass(
       qualifier === "-"
-        ? 'SPF está publicado y rechaza a los remitentes no autorizados ("-all").'
-        : 'SPF está publicado y marca como sospechosos a los remitentes no autorizados ("~all").',
+        ? 'SPF está publicado y termina en "-all" (fail): declara que el correo enviado desde servidores no autorizados no es legítimo y pide a los receptores que lo rechacen.'
+        : 'SPF está publicado y termina en "~all" (softfail): declara que el correo enviado desde servidores no autorizados probablemente no es legítimo, pero pide aceptarlo y tratarlo como sospechoso, no rechazarlo. Es una configuración habitual y válida, sobre todo combinada con DMARC; "-all" es más estricto.',
       { evidence },
     );
   });
@@ -137,7 +139,7 @@ function dmarcCheck(context: ScanContext) {
 
     if (records.length === 0) {
       return fail(
-        "El dominio no publica DMARC: los proveedores de correo no saben qué hacer con mensajes que suplantan tu dominio, y no recibes informes de ello.",
+        "El dominio no publica DMARC: no indica a los servidores que reciben correo cómo tratar los mensajes que usan tu dominio y no superan SPF ni DKIM, y no recibes informes de ello. Cada receptor aplica entonces solo sus propios filtros.",
         remediation,
         { evidence },
       );
@@ -166,18 +168,21 @@ function dmarcCheck(context: ScanContext) {
 
     if (policy === "none") {
       const reports = tag(record, "rua") !== null;
+      // Lo que p=none significa, sin afirmar qué hará cada receptor.
+      const meaning =
+        'Con "p=none" el dominio no pide a los receptores que pongan en cuarentena ni rechacen los mensajes que fallan DMARC. Eso no significa que esos mensajes se entreguen siempre: cada receptor sigue aplicando sus propios filtros antispam y de seguridad.';
 
       return reports
         ? warning(
             0.4,
-            'DMARC está publicado en modo "p=none" con dirección de informes (rua). Es la primera fase normal de un despliegue: recibes informes de quién envía correo en tu nombre, pero los mensajes que suplantan el dominio todavía se entregan.',
-            'Cuando los informes confirmen que tu correo legítimo pasa SPF o DKIM, cambia a "p=quarantine" y después a "p=reject".',
+            `DMARC está publicado en modo de supervisión. ${meaning} El registro sí indica una dirección para informes agregados (rua), así que el dominio puede ver quién envía correo en su nombre: es la primera fase normal de un despliegue.`,
+            'Cuando los informes confirmen que tu correo legítimo supera SPF o DKIM, sube la política a "p=quarantine" y después a "p=reject".',
             { evidence },
           )
         : warning(
             0.25,
-            'DMARC está publicado en modo "p=none" y sin dirección de informes (rua). Así no protege ni informa: los mensajes que suplantan el dominio se entregan y tú no recibes ningún aviso de ello.',
-            'Añade una dirección de informes ("rua=mailto:…") para ver quién envía correo en tu nombre y, cuando el correo legítimo pase SPF o DKIM, sube la política a "p=quarantine" y después a "p=reject".',
+            `DMARC está publicado en modo de supervisión y sin destino para informes. ${meaning} Además, el registro no incluye "rua", es decir, no especifica ninguna dirección a la que enviar los informes agregados de DMARC, así que el dominio no obtiene de él ni protección solicitada ni visibilidad.`,
+            'Añade una dirección de informes ("rua=mailto:…") para ver quién envía correo en nombre del dominio. Cuando compruebes que tu correo legítimo supera SPF o DKIM, sube la política a "p=quarantine" y después a "p=reject".',
             { evidence },
           );
     }
@@ -192,7 +197,9 @@ function dmarcCheck(context: ScanContext) {
     }
 
     return pass(
-      `DMARC está publicado con política "${policy}": los correos que suplantan el dominio se ${policy === "reject" ? "rechazan" : "envían a spam"}.`,
+      policy === "reject"
+        ? 'DMARC está publicado con política "reject": pide a los receptores que rechacen los mensajes que usan el dominio y no superan SPF ni DKIM.'
+        : 'DMARC está publicado con política "quarantine": pide a los receptores que traten como sospechosos (normalmente, carpeta de spam) los mensajes que usan el dominio y no superan SPF ni DKIM.',
       { evidence },
     );
   });

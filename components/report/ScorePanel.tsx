@@ -1,4 +1,9 @@
-import { categoryResult, controlCounts } from "@/lib/engine/format";
+import {
+  COVERAGE_LABEL,
+  SCORE_NOTES,
+  categoryResult,
+  controlCounts,
+} from "@/lib/engine/format";
 import type { ReportScore } from "@/lib/engine/types";
 import {
   CONFIDENCE_LABEL,
@@ -132,16 +137,16 @@ export function ScorePanel({
 
         <div className="grid gap-3 sm:grid-cols-2">
           <Meter
-            label="Cobertura"
+            label={COVERAGE_LABEL}
             value={`${report.coverage}%`}
-            help="Parte de los controles aplicables que se ha podido comprobar. No mide seguridad: mide cuánto se ha visto."
+            help="Parte de los controles aplicables de este catálogo que se ha podido evaluar. No mide seguridad ni equivale a una auditoría completa del dominio."
           >
             <Bar value={report.coverage} tone="fill-sky-400" />
           </Meter>
           <Meter
             label="Confianza del resultado"
             value={CONFIDENCE_LABEL[report.confidence]}
-            help="Baja cuando hay conclusiones basadas en indicios o cuando el análisis no ha podido ver la respuesta normal del sitio."
+            help="Indica cuánto se apoya el resultado en pruebas directas. Baja cuando hay hallazgos basados en indicios o no se pudo ver la respuesta normal del sitio."
           />
         </div>
 
@@ -163,6 +168,17 @@ export function ScorePanel({
             </li>
           ))}
         </ul>
+
+        <details className="text-sm">
+          <summary className="cursor-pointer text-slate-400 hover:text-slate-200">
+            Cómo se calculan estas cifras
+          </summary>
+          <ul className="mt-3 list-disc space-y-2 pl-5 text-xs leading-relaxed text-slate-400">
+            {SCORE_NOTES.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+        </details>
       </div>
     </div>
   );

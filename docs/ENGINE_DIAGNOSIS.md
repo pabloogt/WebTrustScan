@@ -1,5 +1,7 @@
 # ENGINE_DIAGNOSIS — Diagnóstico del motor 1.x y de sus puntuaciones
 
+> **DOCUMENTO HISTÓRICO.** Diagnóstico del motor 1.x hecho al crear el Engine 2.0. Las anomalías descritas siguen siendo ciertas para el motor antiguo; las cifras del Engine 2.0 son las de aquel momento. Pesos, severidades y resultados vigentes: `SCORING_MODEL.md`, `CHECK_CATALOG.md` y `TESTING_REPORT.md`.
+
 **Fecha:** 15 de noviembre de 2026 · **Alcance:** motor de análisis y scoring (no es una tercera auditoría de seguridad).
 
 Todas las anomalías de este documento están **reproducidas** en el laboratorio (`tests/lab/lab.test.ts`), que ejecuta el motor 1.x congelado (`lib/audit/`) y el Engine 2.0 (`lib/engine/`) contra el mismo sitio simulado. Los identificadores `sNN` remiten a esos escenarios; las cifras salen de `tests/lab/results.json`.

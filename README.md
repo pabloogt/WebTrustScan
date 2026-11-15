@@ -4,7 +4,9 @@ Auditoría externa de la configuración de seguridad de una web. Introduces una 
 
 Cada hallazgo lleva severidad, evidencia y solución. La puntuación (0–100, nota A–F) va acompañada de la **cobertura** (qué parte de los controles aplicables se pudo comprobar) y de la **confianza** del resultado.
 
-No es una prueba de intrusión ni una certificación: evalúa lo observable desde fuera, sin autenticarse y con un máximo de cinco peticiones inocuas.
+No es una prueba de intrusión ni una certificación: evalúa lo observable desde fuera, sin autenticarse y con un máximo de cinco peticiones inocuas y un saludo TLS por versión de protocolo.
+
+Las cuentas (dominios guardados, historial, comparación) están implementadas pero **desactivadas por defecto**: solo el analizador es público. Ver [`docs/AUTH_STORAGE_AUDIT.md`](docs/AUTH_STORAGE_AUDIT.md).
 
 ## Qué comprueba
 
@@ -18,7 +20,7 @@ No es una prueba de intrusión ni una certificación: evalúa lo observable desd
 | Acceso entre orígenes | Política CORS |
 | Contenido de la página | Contenido mixto, formularios sin cifrar, SRI |
 | Exposición de información | Versiones en cabeceras, `security.txt` |
-| DNS y correo (informe aparte) | SPF, DMARC, CAA |
+| Correo y DNS (informe aparte, evaluación limitada) | SPF, DMARC, CAA (informativo) |
 
 Estados posibles de un control: correcto, mejorable, fallo, informativo, **no aplica**, **no comprobado** y **error del análisis**. Solo los tres primeros puntúan: lo que no aplica a una web no cuenta, y lo que no se pudo comprobar reduce la cobertura, no la nota.
 
@@ -31,9 +33,10 @@ Documentación en [`docs/`](docs/):
 | [SECURITY_METHODOLOGY.md](docs/SECURITY_METHODOLOGY.md) | Alcance, niveles de comprobación y estándares |
 | [CHECK_CATALOG.md](docs/CHECK_CATALOG.md) | Controles implementados, aprobados y descartados |
 | [TESTING_REPORT.md](docs/TESTING_REPORT.md) | Laboratorio y verificación |
-| [PRO_PRODUCT_SPEC.md](docs/PRO_PRODUCT_SPEC.md) | Especificación de WebTrustScan Pro |
-| [COST_ANALYSIS.md](docs/COST_ANALYSIS.md) | Infraestructura y costes |
-| [ROADMAP.md](docs/ROADMAP.md) · [HANDOFF.md](docs/HANDOFF.md) | Siguientes pasos y continuidad |
+| [CALIBRATION_REPORT.md](docs/CALIBRATION_REPORT.md) | Calibración con dos análisis reales |
+| [AUTH_STORAGE_AUDIT.md](docs/AUTH_STORAGE_AUDIT.md) | Cuentas, contraseñas, sesiones y almacenamiento |
+| [HANDOFF.md](docs/HANDOFF.md) | Estado actual y continuidad |
+| [PRO_PRODUCT_SPEC.md](docs/PRO_PRODUCT_SPEC.md) · [PRO_SERVICES.md](docs/PRO_SERVICES.md) · [COST_ANALYSIS.md](docs/COST_ANALYSIS.md) · [ROADMAP.md](docs/ROADMAP.md) | Planificación comercial, **pospuesta** |
 
 ## Desarrollo
 
@@ -119,7 +122,7 @@ El servidor hace peticiones a URLs que escribe el usuario, así que:
 - Hay un timeout de 8 s por petición (6 s en las sondas secundarias) y 20 s por análisis.
 - Del cuerpo de la página se leen como mucho 512 KB, y la descompresión está acotada a 4 MB para que un sitio malicioso no pueda agotar la memoria.
 - Un certificado no válido se inspecciona para poder informarlo, pero eso no relaja ninguna validación de destino.
-- La sonda de TLS 1.0–1.1 y todas las peticiones adicionales pasan por la misma capa (`lib/audit/safeRequest.ts`). Ningún módulo de análisis abre conexiones por su cuenta.
+- Las sondas de versión de TLS y todas las peticiones adicionales pasan por la misma capa (`lib/audit/safeRequest.ts`). Ningún módulo de análisis abre conexiones por su cuenta.
 - Los valores de las cookies del sitio analizado se descartan y nunca aparecen en un informe.
 
 ### Límite de peticiones

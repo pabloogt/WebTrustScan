@@ -91,7 +91,7 @@ describe("cookies", () => {
     });
     expect(JSON.stringify(cookie)).not.toContain("VALOR-SECRETO");
     expect(describeCookie(cookie!)).toBe(
-      "sid → Secure; HttpOnly; SameSite=strict · el nombre sugiere sesión y el valor es opaco",
+      "sid → Secure; HttpOnly; SameSite=strict · el nombre sugiere sesión y el valor tiene longitud de identificador",
     );
   });
 

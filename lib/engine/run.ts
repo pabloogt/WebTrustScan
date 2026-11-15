@@ -5,6 +5,7 @@ import {
   type SafeFetchOptions,
   type SafeFetchResult,
   type SafeRequestOptions,
+  type TlsProbeResult,
 } from "../audit/safeRequest";
 import { normalizeUrl } from "../normalizeUrl";
 import { getDefinition } from "./catalog";
@@ -15,7 +16,15 @@ import { disclosureChecks } from "./checks/disclosure";
 import { dnsEmailChecks } from "./checks/dnsEmail";
 import { headerChecks } from "./checks/headers";
 import { transportChecks } from "./checks/transport";
-import type { Check, Outcome, Probe, ResponseTrust, ScanContext } from "./context";
+import {
+  TLS_VERSIONS,
+  type Check,
+  type Outcome,
+  type Probe,
+  type ResponseTrust,
+  type ScanContext,
+  type TlsVersion,
+} from "./context";
 import {
   collectDnsFacts,
   createSystemDnsClient,
@@ -90,7 +99,7 @@ function detectEdge(headers: Record<string, string>): string | null {
 }
 
 const CHALLENGE_MARKERS =
-  /just a moment\.\.\.|cf-chl-|challenge-platform|attention required! \| cloudflare|errors\.edgesuite\.net|incapsula incident|sucuri website firewall|request unsuccessful|captcha-delivery|px-captcha/i;
+  /just a moment\.\.\.|cf-chl-|challenge-platform|attention required! \| cloudflare|errors\.edgesuite\.net|incapsula incident|sucuri website firewall|captcha-delivery|px-captcha/i;
 
 function classifyResponse(response: SafeFetchResult): ResponseCondition {
   const { status, headers, body } = response;
@@ -261,6 +270,29 @@ function buildNotices(context: ScanContext): string[] {
   return notices;
 }
 
+/**
+ * Un saludo TLS por versión, cada uno limitado a esa única versión: así se
+ * sabe qué admite el servidor, no solo qué negocia con un cliente moderno.
+ */
+async function probeTlsVersions(
+  origin: string,
+  options: SafeRequestOptions,
+): Promise<Record<TlsVersion, TlsProbeResult>> {
+  const results = await Promise.all(
+    TLS_VERSIONS.map((version) =>
+      Promise.resolve()
+        .then(() =>
+          safeTlsProbe(origin, { minVersion: version, maxVersion: version }, options),
+        )
+        .catch((): TlsProbeResult => ({ outcome: "error", reason: "BLOCKED" })),
+    ),
+  );
+
+  return Object.fromEntries(
+    TLS_VERSIONS.map((version, index) => [version, results[index]]),
+  ) as Record<TlsVersion, TlsProbeResult>;
+}
+
 /** Errores de HTTPS tras los que tiene sentido probar la versión HTTP. */
 function shouldFallbackToHttp(error: unknown): error is AuditError {
   return (
@@ -352,7 +384,7 @@ export async function runAudit(
   const isHttps = finalUrl.protocol === "https:";
   const httpPort = options.httpPort ? `:${options.httpPort}` : "";
 
-  const [httpProbe, corsProbe, securityTxt, legacyTls, dns] = await Promise.all([
+  const [httpProbe, corsProbe, securityTxt, tlsVersions, dns] = await Promise.all([
     isHttps
       ? probe(() => safeFetch(`http://${finalUrl.hostname}${httpPort}/`, probeOptions))
       : Promise.resolve<Probe<SafeFetchResult>>({
@@ -374,13 +406,7 @@ export async function runAudit(
         maxBodyBytes: 16 * 1024,
       }),
     ),
-    isHttps
-      ? safeTlsProbe(
-          finalUrl.origin,
-          { minVersion: "TLSv1", maxVersion: "TLSv1.1" },
-          probeOptions,
-        ).catch(() => ({ outcome: "error" as const, reason: "BLOCKED" }))
-      : Promise.resolve(null),
+    isHttps ? probeTlsVersions(finalUrl.origin, probeOptions) : Promise.resolve(null),
     collectDnsFacts(
       finalUrl.hostname,
       options.dnsClient ?? createSystemDnsClient(),
@@ -410,7 +436,7 @@ export async function runAudit(
     httpProbe,
     corsOrigin: CORS_PROBE_ORIGIN,
     corsProbe,
-    legacyTls,
+    tlsVersions,
     securityTxt,
     dns,
   };

@@ -2,13 +2,22 @@ import { siteOf } from "./html";
 
 /**
  * Clasificación de un script u hoja de estilos respecto a la página:
- * - first-party: mismo sitio, o un dominio de recursos de la misma marca.
+ * - first-party: el mismo sitio.
+ * - same-brand: otro dominio cuyo nombre indica la misma organización
+ *   (media-amazon.com para amazon.es). Es un indicio, no una certeza.
  * - pinned: de un tercero y con contenido fijo (versión o hash en la URL).
  *   Es donde SRI se puede y se debe usar.
- * - dynamic: de un tercero que sirve código cambiante por diseño (analítica,
- *   publicidad, pagos, fuentes). SRI no es viable: romper­ía el servicio.
+ * - dynamic: de un servicio conocido que entrega código cambiante por diseño
+ *   (analítica, publicidad, pagos, fuentes). SRI lo rompería.
+ * - unknown: de un tercero sin versión visible en la URL. No se puede saber
+ *   desde fuera si su contenido es fijo.
  */
-export type ResourceOrigin = "first-party" | "pinned" | "dynamic";
+export type ResourceOrigin =
+  | "first-party"
+  | "same-brand"
+  | "pinned"
+  | "dynamic"
+  | "unknown";
 
 /** Servicios que entregan código distinto según el momento o el navegador. */
 const DYNAMIC_HOSTS = [
@@ -53,6 +62,18 @@ const DYNAMIC_HOSTS = [
 const PINNED_PATH =
   /(@\d+\.\d+)|(\/v?\d+\.\d+(\.\d+)?\/)|([-.]\d+\.\d+\.\d+)|([-._][0-9a-f]{8,}\.(js|css)$)/i;
 
+/** Sufijos y prefijos habituales en dominios de recursos de una marca. */
+const ASSET_WORDS = [
+  "assets",
+  "static",
+  "cdn",
+  "img",
+  "images",
+  "media",
+  "content",
+  "usercontent",
+];
+
 function matchesHost(host: string, domain: string): boolean {
   return host === domain || host.endsWith(`.${domain}`);
 }
@@ -60,6 +81,25 @@ function matchesHost(host: string, domain: string): boolean {
 /** Etiqueta principal del dominio registrable: "amazon" en www.amazon.es. */
 function brandOf(host: string): string {
   return siteOf(host).split(".")[0];
+}
+
+/**
+ * ¿El nombre del dominio de recursos contiene la marca como palabra
+ * completa? Vale "media-amazon" o "githubassets" para "amazon" / "github",
+ * pero NO "shopify" para "shop": una subcadena no basta.
+ */
+export function sameBrand(resourceHost: string, pageHost: string): boolean {
+  const brand = brandOf(pageHost);
+  const other = brandOf(resourceHost);
+
+  // Con marcas muy cortas la coincidencia sería casual.
+  if (brand.length < 4) return false;
+  if (other === brand) return true;
+  if (other.split("-").includes(brand)) return true;
+
+  return ASSET_WORDS.some(
+    (word) => other === `${brand}${word}` || other === `${word}${brand}`,
+  );
 }
 
 export function classifyResource(
@@ -71,22 +111,17 @@ export function classifyResource(
   try {
     url = new URL(resourceUrl);
   } catch {
-    return "dynamic";
+    return "unknown";
   }
 
   const host = url.hostname.toLowerCase();
 
   if (siteOf(host) === siteOf(pageHost)) return "first-party";
-
-  // Dominios de recursos de la misma organización (media-amazon.com para
-  // amazon.es, githubassets.com para github.com…). Con marcas muy cortas la
-  // coincidencia sería casual, así que se exige un mínimo de 4 letras.
-  const brand = brandOf(pageHost);
-  if (brand.length >= 4 && brandOf(host).includes(brand)) return "first-party";
+  if (sameBrand(host, pageHost)) return "same-brand";
 
   if (DYNAMIC_HOSTS.some((domain) => matchesHost(host, domain))) {
     return "dynamic";
   }
 
-  return PINNED_PATH.test(url.pathname) ? "pinned" : "dynamic";
+  return PINNED_PATH.test(url.pathname) ? "pinned" : "unknown";
 }

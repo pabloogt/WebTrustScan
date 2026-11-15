@@ -1,46 +1,105 @@
 # CALIBRATION_REPORT — Calibración con dos análisis reales
 
-**Fecha:** 15 de noviembre de 2026 · **Casos:** `www.amazon.es` y `termlifepicks.com`.
+**Actualizado:** 15 de noviembre de 2026 (segunda pasada: revisión técnica). **Casos:** `www.amazon.es` y `termlifepicks.com`.
 
-Los informes originales no se adjuntaron, así que cada análisis se reprodujo con el motor (una vez antes y una vez después de los cambios; TermLifePicks, además, dos veces desde el panel para probar el historial). No se ha modificado nada en ninguno de los dos sitios. Cada corrección tiene su test en `tests/engine/calibration.test.ts`.
+Informes vigentes, en JSON y PDF: [`docs/informes/`](informes/). No se ha modificado nada en ninguno de los dos sitios; solo se han usado las comprobaciones inocuas del motor.
 
-## Resultado
+## Evolución de las puntuaciones
 
-| Sitio | Motor 1.x | Engine 2.0 antes | Engine 2.0 calibrado | Correo y DNS |
-|---|---|---|---|---|
-| www.amazon.es | 78 | 77 | **85 (B)** | 85 → **100 (A)** |
-| termlifepicks.com | 77 | 60 | **61 (C)** | 57 → **59 (D)** |
+| Sitio | Motor 1.x | Engine 2.0 inicial | 1.ª calibración | **Revisión técnica** | Correo y DNS |
+|---|---|---|---|---|---|
+| www.amazon.es | 78 | 77 | 85 | **82 (B)** | 100 (A) |
+| termlifepicks.com | 77 | 60 | 61 | **61 (C)** | 59 (D) |
 
-## Amazon.es
+El desglose de cada nota está en `SCORING_MODEL.md` §5.
 
-| Pregunta | Conclusión | Cambio |
+## Primera calibración (resumen)
+
+Corrigió tres errores del motor detectados con datos reales:
+
+- **Cookies de borrado contadas como cookies.** Amazon envía cabeceras que borran cookies antiguas de otro dominio; el motor se quedaba con la última por nombre y veía una «cookie de sesión sin Secure» inexistente. Ahora las cookies se identifican por nombre + dominio + ruta y los borrados se ignoran.
+- **CDN propio tratado como tercero.** `m.media-amazon.com` contaba como tercero para SRI.
+- **SRI exigido a servicios que no lo admiten.** Google Tag Manager y AdSense se penalizaban.
+
+Y cuatro criterios: CSP ausente pasa a severidad media; CAA ausente es informativo; DMARC distingue `p=none` con y sin informes; no se publica nota con muy pocos controles.
+
+## Revisión técnica: qué se encontró y qué se cambió
+
+### 1. TLS: la afirmación no se correspondía con la prueba
+
+**Problema.** El informe decía «el servidor ha completado un saludo limitado a TLS 1.0–1.1» y mostraba un comando con `-tls1_1`. El motor hacía **un solo** saludo con el rango 1.0–1.1: el servidor elige la más alta que admite, así que el resultado «TLS 1.1» no decía nada sobre TLS 1.0. Además la frase podía leerse como que el servidor solo admite esas versiones.
+
+**Cambio.** Un saludo independiente por versión (1.0, 1.1, 1.2, 1.3), cada uno limitado a esa única versión, más la versión que negocia una conexión normal. El informe enumera los cinco resultados y da un comando de reproducción por cada versión antigua aceptada.
+
+**Tres resultados posibles por versión**, que antes se mezclaban:
+
+| Resultado | Cuándo | Efecto |
 |---|---|---|
-| ¿Se interpreta bien la CSP? | **Sí.** La política aplicada es `upgrade-insecure-requests; report-uri …`: no contiene `script-src` ni `default-src`. La política con `default-src` está solo en Report-Only. | La descripción ahora nombra las directivas declaradas y menciona la política Report-Only. |
-| ¿Las cookies son realmente de sesión? | **No se podía afirmar, y además había un error.** Amazon envía, junto a las cookies reales, cabeceras que *borran* cookies antiguas de otro dominio (`session-id=-; expires=2014`). El motor se quedaba con la última por nombre y veía una «cookie de sesión sin Secure» que no existe. La detección dependía solo del nombre. | Las cookies se identifican por nombre + dominio + ruta; los borrados se ignoran; para considerar una cookie «de sesión» hace falta un nombre de framework conocido, o un nombre sugerente **y** un valor con aspecto de identificador. |
-| ¿Severidad y confianza adecuadas? | Estaban infladas. | Cookies: confianza media (nombre conocido) o baja (indicio), visible en cada hallazgo. Resultado real en Amazon: solo `i18n-prefs` y `lc-acbes` sin `Secure`, severidad baja; HttpOnly no aplica. |
-| ¿Acepta TLS 1.1 `www.amazon.es`? | **Sí, confirmado de forma independiente** con OpenSSL (`openssl s_client -tls1_1`): completa el saludo con TLS 1.1 y también con TLS 1.0. | Severidad bajada a **baja** (los navegadores actuales no negocian esas versiones); la evidencia incluye el comando para reproducirlo. |
-| ¿CAA bien descrito y puntuado? | No: se trataba como fallo, cuando CAA es opcional y la mayoría de dominios no lo publica. | Ausencia de CAA = **informativo, sin peso**. |
+| Aceptado | El saludo se completa | Hallazgo si es 1.0 o 1.1 |
+| Rechazado | El servidor responde con una alerta de versión no admitida (concluyente) o corta el saludo sin explicación (coherente con un rechazo; confianza media) | Correcto |
+| No comprobable | Fallo de red, tiempo agotado, destino bloqueado, servicio que no habla TLS o **cliente que no puede usar esa versión** | «No comprobado»: no se afirma nada del servidor |
 
-También se corrigió un falso positivo de SRI: `m.media-amazon.com` es el CDN propio de Amazon y se contaba como tercero (10 de 10 recursos «sin integrity»).
+Antes, un `ECONNRESET` o un fallo interno se contaban como rechazo, y el motor no distinguía un rechazo explícito de un corte.
 
-## TermLifePicks
+**Resultado en `www.amazon.es`**, idéntico con el motor y con OpenSSL ejecutado aparte:
 
-| Pregunta | Conclusión | Cambio |
+| Versión | Motor | `openssl s_client` |
 |---|---|---|
-| ¿61 es proporcional? | **Sí.** El transporte es correcto salvo HSTS, pero de las protecciones del navegador solo está Permissions-Policy (1 de 4). | — |
-| ¿CSP ausente: alta o media? | **Media.** Es una defensa en profundidad; su ausencia no es una vulnerabilidad. Conserva un peso alto en la nota (10). | Severidad a media y texto que lo dice expresamente. |
-| ¿Penalizaciones duplicadas? | **No.** CSP (scripts), clickjacking (marcos), HSTS y nosniff cubren ataques distintos. Una sola cabecera CSP con `frame-ancestors` resolvería dos de ellos, y así se explica. | — |
-| ¿SRI distingue estáticos de dinámicos? | **No lo hacía.** Penalizaba Google Tag Manager y AdSense, que cambian su código por diseño y no admiten SRI. | Clasificación en propio / versión fija / dinámico. Solo puntúan los de versión fija; los dinámicos se listan como informativos con su URL. |
-| ¿DMARC bien explicado? | Era incompleto. El registro es `v=DMARC1; p=none;` **sin `rua`**: ni protege ni envía informes. | Dos casos distintos: `p=none` con informes (crédito 0,4, «primera fase normal») y sin informes (0,25, «no protege ni informa»). |
-| ¿Se diferencia web de DNS/correo? | Sí en datos; mejorable en pantalla. | Informe aparte, renombrado «Correo y DNS», con un texto que explica que no altera la nota web. |
-| ¿Nota de DNS engañosa con un solo control? | **Sí.** | Con menos de 2 controles evaluados no se publica nota de correo (6 en el informe web). En categorías con menos de 3 controles se muestra «1 de 1 correcto» en lugar de un porcentaje. |
+| TLS 1.0 | Aceptado | Aceptado (`ECDHE-RSA-AES128-SHA`) |
+| TLS 1.1 | Aceptado | Aceptado |
+| TLS 1.2 | Aceptado | Aceptado |
+| TLS 1.3 | Aceptado | Aceptado |
+| Conexión normal | Negocia TLS 1.3 | Negocia TLS 1.3 |
 
-## Otros cambios derivados
+Texto actual: «El servidor todavía acepta conexiones con TLS 1.0 y TLS 1.1 […]. Esto no cambia cómo conectan los navegadores actuales, que con este servidor negocian TLSv1.3: solo un cliente antiguo, o uno forzado a bajar de versión, usaría esas versiones.» Severidad baja.
 
-- Las entidades HTML de los atributos se decodifican (`&#038;` aparecía en las URL de evidencia).
-- La redirección HTTP → HTTPS pasa a severidad media, en línea con HSTS.
-- El informe muestra cuántos controles se han evaluado, cuántos no aplican y cuántos no se pudieron comprobar.
+`termlifepicks.com` rechaza 1.0 y 1.1 con una alerta explícita de versión de protocolo.
 
-## Límites de esta calibración
+### 2. DMARC y SPF: se afirmaba lo que harían los receptores
 
-Dos sitios no son una muestra. Las listas de servicios «dinámicos» y la detección de CDN propio por nombre de marca son heurísticas que fallarán en algún caso; por eso SRI lleva confianza media. Hace falta repetir el ejercicio con 20–30 dominios autorizados.
+**Problema.** Para `v=DMARC1; p=none;` el informe decía que los correos que suplantan el dominio «se siguen entregando». Eso depende de cada receptor, no del registro. SPF describía `~all` y `-all` de forma parecida.
+
+**Cambio.**
+
+- `p=none`: «el dominio no pide a los receptores que pongan en cuarentena ni rechacen los mensajes que fallan DMARC. Eso no significa que esos mensajes se entreguen siempre: cada receptor sigue aplicando sus propios filtros antispam y de seguridad».
+- Sin `rua`: «el registro no especifica ninguna dirección a la que enviar los informes agregados de DMARC».
+- `~all` se describe como **softfail** (pide aceptar y tratar como sospechoso) y `-all` como **fail** (pide rechazar). Ambos siguen siendo correctos; cambia la explicación, no la nota.
+- `quarantine` y `reject` describen lo que el dominio **pide**, no lo que ocurrirá.
+
+Severidad de `p=none` sin `rua`: baja, crédito 0,25 (sin cambios).
+
+### 3. HSTS: se recomendaba `includeSubDomains` sin poder comprobarlo
+
+**Problema.** La cabecera propuesta era `max-age=31536000; includeSubDomains`, y un HSTS sin esa opción se presentaba como mejorable.
+
+**Cambio.** La recomendación es progresiva: empezar con un día, subir a un año cuando funcione, y añadir `includeSubDomains` **solo** tras verificar que todos los subdominios, actuales y previstos, funcionan por HTTPS; se explica que con esa opción el navegador deja de abrir por HTTP cualquier subdominio. `preload` no se recomienda. Un HSTS válido sin `includeSubDomains` es correcto sin reservas.
+
+### 4. CSP: se proponía una política concreta para copiar
+
+**Problema.** Se sugería `default-src 'self'; object-src 'none'…`, que en un WordPress con Tag Manager y AdSense rompería la web.
+
+**Cambio.** La recomendación empieza siempre por `Content-Security-Policy-Report-Only`, revisar las infracciones y después aplicar. Nombra los terceros detectados en la página (en TermLifePicks: `googletagmanager.com`, `googlesyndication.com`) y, si el sitio parece WordPress, advierte de la plantilla y los plugins. Una política solo en Report-Only se describe como «no hay ninguna CSP aplicada».
+
+### 5. Heurísticas: la primera calibración se había pasado de permisiva
+
+| Heurística | Problema | Cambio |
+|---|---|---|
+| Cookie de sesión | Se exigía que el valor mezclara letras y cifras: un identificador solo numérico (el `session-id` de Amazon) o solo hexadecimal quedaba descartado. **Falso negativo.** | Basta un nombre sugerente y un valor de 16 o más caracteres. Sigue siendo un indicio, con confianza baja y el texto «Es un indicio, no una certeza». |
+| Borrado de cookie | Se miraba `Expires` aunque hubiera `Max-Age`. | `Max-Age` tiene prioridad (RFC 6265); una fecha ilegible no se toma por borrado. |
+| Recurso propio por marca | Bastaba que el nombre contuviera la marca: `cdn.shopify.com` se daba por propio de `shop.com`. **Falso negativo.** | La marca debe aparecer como palabra completa (`media-amazon`, `githubassets`). El informe declara qué dominios se han tratado como propios y que es un indicio. |
+| Tercero sin versión en la URL | Se clasificaba como «dinámico, SRI no aplicable»: una afirmación sin base. | Clase aparte: «no se puede saber desde fuera si su contenido es fijo». No puntúa, pero se dice y se recomienda una URL versionada. |
+| Bloqueo de WAF | El texto genérico «request unsuccessful» en un 403 se tomaba por bloqueo. | Solo cuentan marcas específicas de proveedor. |
+
+**Efecto en Amazon:** la cookie `session-id` (con `Secure`, sin `HttpOnly` ni `SameSite`) vuelve a señalarse, ahora con confianza baja. Por eso la nota baja de 85 a 82. Es el único cambio de puntuación de esta revisión.
+
+### 6. Presentación
+
+- «N de M correctos · **puntuación ponderada** X/100», para que 9/100 no se lea como un 9 % de controles superados.
+- «Cobertura **del catálogo aplicable**», con la aclaración de que no equivale a auditar el dominio.
+- Apartado «Cómo leer estas cifras» en la interfaz y en el PDF.
+- Aviso visible de **evaluación limitada** en el informe de correo y DNS.
+- CAA ausente sigue siendo informativo y sin peso.
+
+## Límites
+
+Dos sitios no son una muestra. Las reglas de cookies, marca y SRI son heurísticas que fallarán en algún caso; por eso llevan confianza reducida y texto condicional. Hace falta repetir el ejercicio con 20–30 dominios autorizados antes de dar el motor por calibrado.

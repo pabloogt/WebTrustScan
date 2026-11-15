@@ -1,93 +1,93 @@
 # CHECK_CATALOG — Catálogo de comprobaciones
 
-Fuente de verdad en código: `lib/engine/catalog.ts` (identificador, categoría, severidad, peso, método y referencias). Un test garantiza que cada entrada del catálogo tiene exactamente una implementación.
+**Actualizado:** 15 de noviembre de 2026. Fuente de verdad en código: `lib/engine/catalog.ts`. Un test garantiza que cada entrada tiene exactamente una implementación. Pesos y severidades: `SCORING_MODEL.md` §4.
 
-Criterio general: **pocos controles, bien interpretados**. Un control entra si (1) se puede evaluar desde fuera con evidencia, (2) su resultado cambia lo que el dueño de la web debería hacer y (3) su tasa de falsos positivos es defendible.
+Criterio: **pocos controles, bien interpretados**. Un control entra si se puede evaluar desde fuera con evidencia, si su resultado cambia lo que el dueño de la web debería hacer y si su tasa de falsos positivos es defendible.
 
-## 1. Implementado (24 controles)
+## 1. Controles implementados (24)
 
-### Informe «Seguridad web»
+### Informe «Seguridad web» (21)
 
-| ID | Qué comprueba | Sev. máx. | Peso | Método |
-|---|---|---|---|---|
-| `transport.https` | La URL final se sirve por HTTPS. Si `https://` no responde, prueba `http://` e informa. | Crítica | 10 | Pasivo |
-| `transport.certificate` | Cadena de confianza, nombre del host (SAN), vigencia y caducidad próxima (umbral proporcional a la duración del certificado). | Crítica | 10 | Pasivo |
-| `transport.tls-version` | Versión TLS negociada ≥ 1.2. | Alta | 4 | Pasivo |
-| `transport.legacy-tls` | El servidor rechaza un saludo TLS 1.0–1.1. | Media | 3 | Activo |
-| `transport.http-redirect` | `http://` lleva a HTTPS del mismo sitio. Puerto 80 cerrado = correcto. | Alta | 6 | Activo |
-| `transport.hsts` | `max-age` válido y ≥ 6 meses; avisa de `includeSubDomains` y de `preload` mal declarado. | Media | 8 | Pasivo |
-| `headers.csp` | CSP aplicada (cabecera o `<meta>`), control real de scripts, `'unsafe-inline'`, comodines, `'unsafe-eval'`, Report-Only. | Alta | 10 | Pasivo |
-| `headers.clickjacking` | `frame-ancestors` o X-Frame-Options (valores repetidos, contradictorios y obsoletos). | Media | 6 | Pasivo |
-| `headers.nosniff` | `X-Content-Type-Options: nosniff`. | Baja | 4 | Pasivo |
-| `headers.referrer-policy` | Valores que filtran la URL completa. Ausente = informativo. | Baja | 2 | Pasivo |
-| `headers.permissions-policy` | Presencia y formato; detecta `Feature-Policy` obsoleta. | Baja | 2 | Pasivo |
-| `headers.cross-origin-isolation` | COOP / COEP / CORP. | Info | 0 | Pasivo |
-| `cookies.secure` | Atributo `Secure`; prefijos `__Host-` / `__Secure-`. | Media | 6 | Pasivo |
-| `cookies.httponly` | `HttpOnly` en cookies que parecen de sesión (excluye tokens CSRF). | Media | 6 | Pasivo |
-| `cookies.samesite` | `SameSite` declarado; `None` sin `Secure`. | Baja | 3 | Pasivo |
-| `cors.policy` | Reflexión de origen, `null`, comodín con credenciales, `Vary: Origin`. | Alta | 4 | Activo |
-| `content.mixed-content` | Recursos `http://` en página HTTPS (activos vs. pasivos; respeta `upgrade-insecure-requests`). | Media | 4 | Pasivo |
-| `content.insecure-forms` | Formularios con `action` HTTP; agrava si llevan contraseña. | Alta | 6 | Pasivo |
-| `content.sri` | Scripts y estilos de otros dominios sin `integrity`. | Baja | 2 | Pasivo |
-| `disclosure.banner` | Versiones en `Server`, `X-Powered-By`, `X-AspNet-Version`, `X-Generator`. | Baja | 1 | Pasivo |
-| `disclosure.security-txt` | `/.well-known/security.txt` válido y no caducado. | Info | 0 | Activo |
+| ID | Qué comprueba y cómo decide | Método |
+|---|---|---|
+| `transport.https` | La URL final se sirve por HTTPS. Si `https://` no responde prueba `http://` e informa. | Pasivo |
+| `transport.certificate` | Cadena de confianza, nombre del host, vigencia y caducidad próxima. | Pasivo |
+| `transport.tls-version` | Versión que negocia una conexión normal con un cliente actual. Avisa (sin penalizar) si el servidor no ofrece TLS 1.3. | Pasivo |
+| `transport.legacy-tls` | **Un saludo independiente por versión** (TLS 1.0, 1.1, 1.2 y 1.3). Falla si acepta 1.0 o 1.1; indica cuál de las dos. | Activo |
+| `transport.http-redirect` | `http://` lleva a HTTPS del mismo sitio. Puerto 80 cerrado = correcto. | Activo |
+| `transport.hsts` | `max-age` válido y ≥ 6 meses. `includeSubDomains` y `preload` no se exigen ni se recomiendan como primer paso. | Pasivo |
+| `headers.csp` | CSP **aplicada** (cabecera o `<meta>`) y con control real de scripts. Distingue Report-Only, sin `script-src`, `'unsafe-inline'`, comodines y `'unsafe-eval'`. | Pasivo |
+| `headers.clickjacking` | `frame-ancestors` o X-Frame-Options. | Pasivo |
+| `headers.nosniff` | `X-Content-Type-Options: nosniff`. | Pasivo |
+| `headers.referrer-policy` | Valores que filtran la URL completa. Ausente = informativo. | Pasivo |
+| `headers.permissions-policy` | Presencia y formato. | Pasivo |
+| `headers.cross-origin-isolation` | COOP / COEP / CORP. Solo informativo. | Pasivo |
+| `cookies.secure` | Atributo `Secure`. | Pasivo |
+| `cookies.httponly` | `HttpOnly` en cookies que podrían ser de sesión. | Pasivo |
+| `cookies.samesite` | `SameSite` declarado; `None` sin `Secure`. | Pasivo |
+| `cors.policy` | Reflexión de origen, `null`, comodín con credenciales. | Activo |
+| `content.mixed-content` | Recursos `http://` en página HTTPS. | Pasivo |
+| `content.insecure-forms` | Formularios con `action` HTTP. | Pasivo |
+| `content.sri` | `integrity` en scripts y estilos de terceros **con versión fija**. | Pasivo |
+| `disclosure.banner` | Versiones de software en cabeceras. | Pasivo |
+| `disclosure.security-txt` | `/.well-known/security.txt`. Solo informativo. | Activo |
 
-### Informe «DNS y correo» (puntuación independiente)
+### Informe «Correo y DNS» (3) — evaluación limitada
 
-| ID | Qué comprueba | Sev. máx. | Peso |
+| ID | Qué comprueba | Peso |
+|---|---|---|
+| `email.spf` | Registro único y calificador de `all`: `+all` (falla), `?all` (parcial), `~all` softfail y `-all` fail (ambos correctos, descritos por separado). | 5 |
+| `email.dmarc` | Existencia, política y `rua`. `p=none` se describe como «no solicita cuarentena ni rechazo», sin afirmar qué hará cada receptor. | 6 |
+| `dns.caa` | Registros CAA. **Informativo y sin peso** cuando faltan: CAA es opcional. | 0 |
+
+**Este informe solo mira dos registros DNS.** No comprueba DKIM, ni que los mensajes enviados superen SPF/DKIM/DMARC, ni DNSSEC, MTA-STS, TLS-RPT o los servidores de correo. La interfaz y el PDF lo advierten de forma visible. Con menos de dos controles evaluados no se publica nota.
+
+## 2. Heurísticas: qué se deduce y con qué confianza
+
+Varias conclusiones no se pueden demostrar desde fuera. Se señalan como indicio, con confianza reducida (que también reduce su peso en la nota) y sin afirmaciones categóricas.
+
+| Decisión | Regla | Confianza | Riesgo conocido |
 |---|---|---|---|
-| `email.spf` | Registro único, calificador de `all` (`+all`, `?all`, `~all`, `-all`), `redirect`. Sin MX ni SPF = informativo. | Media | 5 |
-| `email.dmarc` | Existencia, política (`none` / `quarantine` / `reject`), `sp` heredado, `pct`. | Media | 6 |
-| `dns.caa` | Registros `issue` / `issuewild`, con herencia del dominio padre. | Baja | 2 |
+| ¿Es una cookie de sesión? | Nombre de sesión de un framework conocido (`PHPSESSID`, `JSESSIONID`…), **o** nombre sugerente (`sess`, `auth`, `token`…) y valor de 16 o más caracteres. Los tokens anti-CSRF se excluyen. | Media (nombre conocido) o baja (nombre sugerente) | Falso positivo: un identificador de visitante que no autentica (caso `session-id` de Amazon). Falso negativo: una cookie de sesión con nombre no reconocible. |
+| ¿Es un borrado de cookie? | Valor vacío, `Max-Age` ≤ 0 o, si no hay `Max-Age`, `Expires` en el pasado. `Max-Age` tiene prioridad (RFC 6265). Una fecha ilegible no se toma por borrado. | Alta | — |
+| ¿Dos cabeceras son la misma cookie? | Mismo nombre, dominio y ruta. | Alta | — |
+| ¿Un recurso es propio? | Mismo dominio registrable (alta). O dominio cuyo nombre contiene la marca del sitio **como palabra completa** (`media-amazon`, `githubassets`), con marcas de 4 o más letras (indicio, se declara en el informe). | Alta / indicio | `shopify` ya no cuenta como propio de `shop`. Una organización con dominios de recursos sin relación de nombre se verá como tercero. |
+| ¿Admite SRI un recurso de terceros? | **Versión fija:** número de versión o hash en la URL → se evalúa. **Servicio de contenido cambiante:** lista de dominios conocidos (analítica, publicidad, fuentes, pagos) → no puntúa. **Desconocido:** tercero sin versión visible → no puntúa y se dice que no se puede saber. | Media | La lista de servicios es finita. Un fichero fijo servido sin versión en la URL no se evalúa. |
+| ¿Hay una CDN o WAF delante? | Cabeceras propias del proveedor (`cf-ray`, `x-amz-cf-id`, `x-vercel-id`…). | Alta para la presencia; no se afirma nada sobre el origen | Proveedores no listados no se detectan. |
+| ¿La respuesta es un bloqueo? | Solo con 403, 429 o 503 **y** una marca específica del proveedor. Un 403 con texto genérico se evalúa como página de error normal. | Alta | Un bloqueo de un proveedor no listado se evalúa como 403 corriente, con confianza reducida. |
+| ¿El sitio es WordPress? | Rutas `/wp-content/` o `/wp-includes/` en los recursos. Solo se usa para adaptar la recomendación de CSP. | Indicio («parece WordPress») | — |
 
-## 2. Evaluado para el catálogo: decisión y motivo
+## 3. DKIM: valorado, no implementado
 
-Valoración resumida de cada propuesta: utilidad · precisión · coste/complejidad · potencial comercial.
+Añadir DKIM tiene valor, pero «DKIM» son cuatro cosas distintas y solo las dos primeras son posibles sin acceso al correo del dominio:
 
-### Aprobado para el modo profundo (requiere dominio verificado — Pro)
+| Nivel | Qué demuestra | ¿Posible desde fuera? |
+|---|---|---|
+| 1. Descubrimiento de selectores | Nada por sí solo. Los selectores no se pueden enumerar: solo se pueden probar nombres comunes (`google`, `selector1`, `default`, `k1`…). **No encontrar ninguno no significa que no haya DKIM.** | Parcial |
+| 2. Existencia de un registro TXT en `<selector>._domainkey` | Que el dominio publica una clave para ese selector. | Sí |
+| 3. Validez de la clave publicada | Que el registro es sintácticamente correcto y la clave tiene un tamaño aceptable (por ejemplo, RSA de 2048 bits) y no está revocada (`p=` vacío). | Sí |
+| 4. Verificación efectiva | Que los mensajes que envía el dominio van firmados y la firma valida. | **No.** Hace falta recibir un mensaje real del dominio. |
+
+Si se implementa, será **informativo y sin peso**, y el texto dirá «se ha encontrado una clave DKIM publicada para el selector X», nunca «DKIM verificado». El nivel 4 solo sería posible con un buzón de pruebas al que el usuario envíe un correo, que es otra funcionalidad.
+
+## 4. Otras propuestas evaluadas
 
 | Módulo | Decisión | Motivo |
 |---|---|---|
-| **Ficheros y rutas sensibles** (`.git/HEAD`, `.env`, copias `.bak`/`.zip`, `phpinfo`, *source maps*) | **Siguiente módulo a construir** | Utilidad muy alta y precisión alta si se verifica el *contenido* de la respuesta, no solo el código 200. Lista cerrada (< 30 rutas). Es intrusivo-leve: solo con propiedad verificada. Es el argumento de venta más claro de Pro. |
-| **Métodos HTTP** (`OPTIONS`, `TRACE`) | Aprobado | Barato y preciso. `TRACE` hoy es poco explotable: severidad baja. |
-| **Rastreo limitado** (≤ 10 páginas del mismo dominio) | Aprobado | Mejora mucho contenido mixto, formularios y cookies, que hoy solo ven la portada. Coste: multiplica peticiones y tiempo → necesita cola, no una función síncrona. |
-| **Listado de directorios** | Aprobado | Detección fiable por firma («Index of /»). |
-| **Paneles de administración expuestos** | Aprobado como *informativo* | Que `/wp-admin` exista no es un fallo; solo se informa. |
+| Ficheros y rutas sensibles (`.git`, `.env`, copias) | Aprobado, pospuesto | Requiere verificar la propiedad del dominio, que depende de las cuentas (hoy desactivadas). |
+| Métodos HTTP, listado de directorios, rastreo limitado | Aprobado, pospuesto | Mismo requisito. |
+| Detección de cambios y aviso de caducidad de certificado | Aprobado, pospuesto | Dependen de guardar auditorías. |
+| DNSSEC | Pendiente | `node:dns` no expone lo necesario; exige DNS-over-HTTPS contra un servicio externo. |
+| Cifrados TLS débiles | Pospuesto | Decenas de saludos por análisis; SSL Labs lo hace gratis. |
+| Subdominios abandonados | Pospuesto | Alto riesgo de falso positivo. |
+| Correlación versión → CVE a partir de *banners* | **Descartado** | Los *backports* y los *banners* falsos darían vulnerabilidades inexistentes. |
+| `X-XSS-Protection`, `Expect-CT`, `Public-Key-Pins` | **Descartado** | Cabeceras obsoletas. |
+| SEO y rendimiento | **Descartado** | Otro producto. |
 
-### Aprobado para monitorización (Pro)
+## 5. Cómo añadir un control
 
-| Módulo | Decisión | Motivo |
-|---|---|---|
-| **Detección de cambios** entre auditorías | **Prioridad alta** | El motor ya produce resultados estables y con identificador: comparar dos informes es barato y es lo que justifica una suscripción. |
-| **Caducidad de certificado** con aviso anticipado | Prioridad alta | El dato ya se recoge. Alerta de valor inmediato y cero falsos positivos. |
-| **DNSSEC** | Aprobado, pendiente | `node:dns` no expone el bit AD ni consultas DS. Requiere DNS-over-HTTPS contra un resolvedor validador: dependencia externa nueva que hay que evaluar. |
-| **DKIM** | Aprobado como *informativo* | Los selectores no se pueden enumerar. Solo se pueden probar selectores comunes: un «no encontrado» no demuestra nada, así que nunca puntuará. |
-| **Certificate Transparency** (certificados emitidos para el dominio) | A estudiar | Buen valor para detectar emisiones inesperadas; depende de un servicio externo y de sus límites. |
-
-### Pospuesto
-
-| Módulo | Motivo |
-|---|---|
-| **Cifrados débiles / configuración TLS completa** | Requiere decenas de saludos por análisis. SSL Labs ya lo hace gratis y mejor; se enlazará en lugar de duplicarlo. |
-| **`Cache-Control` en respuestas sensibles** | Solo tiene sentido en páginas autenticadas, que no vemos. En la portada genera ruido. |
-| **`Clear-Site-Data`** | Solo aplica al cierre de sesión. |
-| **Subdominios abandonados (*takeover*)** | Exige enumerar subdominios y verificar huellas por proveedor. Alto riesgo de falso positivo; nunca se declarará un *takeover* confirmado. Posible módulo Agency. |
-| **WebSockets, seguridad de APIs** | Requieren conocer la aplicación o autenticarse. |
-
-### Descartado
-
-| Módulo | Motivo |
-|---|---|
-| **Correlación versión → CVE a partir de *banners*** | Precisión insuficiente: las distribuciones aplican parches sin cambiar la versión (*backports*), y muchos *banners* son falsos o de la CDN. Daría «vulnerabilidades» que no existen, justo lo que el producto quiere evitar. Solo se reconsiderará con evidencia de versión fiable (p. ej. un fichero de versión de un CMS en modo profundo) y mostrando siempre «indicio que requiere verificación». |
-| **Detección de tecnologías como puntuación** | Informar de que una web usa WordPress no es un hallazgo de seguridad. Puede añadirse como dato informativo, nunca puntuado. |
-| **`X-XSS-Protection`** | Cabecera obsoleta y retirada de los navegadores; pedirla es un error que cometen otros escáneres. |
-| **`Expect-CT`, `Public-Key-Pins`** | Obsoletas. |
-| **SEO y rendimiento** | Otro producto. Mezclarlo diluiría el posicionamiento. |
-
-## 3. Cómo añadir un control
-
-1. Añadir la definición en `lib/engine/catalog.ts` (ID, informe, categoría, severidad, peso, método, referencias).
-2. Si necesita datos nuevos, recogerlos en `runAudit` (`lib/engine/run.ts`) **a través de `safeFetch` / `safeTlsProbe`** y exponerlos en `ScanContext`.
-3. Implementar la función en `lib/engine/checks/<categoría>.ts` devolviendo un `Outcome` con `pass / fail / warning / info / notApplicable / notTested`. Usar `responseLevel` o `htmlOnly` si depende de la respuesta.
-4. Añadir un escenario en `tests/lab/lab.test.ts` con el caso bueno, el malo y el «no aplica».
+1. Definirlo en `lib/engine/catalog.ts`.
+2. Si necesita datos nuevos, recogerlos en `runAudit` **a través de `safeFetch` / `safeTlsProbe`** y exponerlos en `ScanContext`.
+3. Implementarlo en `lib/engine/checks/<categoría>.ts`, decidiendo de forma explícita cuándo es `not_applicable`, `not_tested` o `info`, y con qué confianza.
+4. Añadir al laboratorio el caso bueno, el malo, el «no aplica» y el falso positivo que se quiere evitar.
 5. Justificar el peso en `SCORING_MODEL.md`.

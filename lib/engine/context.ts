@@ -26,6 +26,9 @@ export type Probe<T> =
  */
 export type ResponseTrust = "full" | "reduced" | "none";
 
+export const TLS_VERSIONS = ["TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3"] as const;
+export type TlsVersion = (typeof TLS_VERSIONS)[number];
+
 export type ScanContext = {
   now: Date;
   input: string;
@@ -44,8 +47,11 @@ export type ScanContext = {
   httpProbe: Probe<SafeFetchResult>;
   corsOrigin: string;
   corsProbe: Probe<SafeFetchResult>;
-  /** null cuando la URL final no es HTTPS. */
-  legacyTls: TlsProbeResult | null;
+  /**
+   * Resultado de un saludo independiente por cada versión de TLS.
+   * null cuando la URL final no es HTTPS.
+   */
+  tlsVersions: Record<TlsVersion, TlsProbeResult> | null;
   securityTxt: Probe<SafeFetchResult>;
   /** null cuando el host es una IP (no hay dominio que consultar). */
   dns: DnsFacts | null;

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getClientIdentity } from "../clientIp";
 import { createMemoryStore, createRateLimiter } from "../rateLimit";
 import { SESSION_MAX_AGE_SECONDS, getSession, type SessionContext } from "./auth";
+import { accountsEnabled } from "./config";
 import { getDb, isProConfigured, type Db } from "./db";
 import { ProError } from "./errors";
 
@@ -157,6 +158,16 @@ export function route<C = Record<string, never>>(handler: Handler<C>) {
     request: NextRequest,
     context: { params: Promise<C> },
   ): Promise<NextResponse> => {
+    // Cuentas desactivadas: la ruta se comporta como si no existiera. Se
+    // comprueba antes que nada: no se abre la base de datos, no se lee el
+    // cuerpo y no se revela qué rutas hay.
+    if (!accountsEnabled()) {
+      return NextResponse.json(
+        { error: "No encontrado." },
+        { status: 404, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+
     try {
       if (!isProConfigured()) {
         throw new ProError(503, "Las cuentas no están disponibles en este entorno.");
