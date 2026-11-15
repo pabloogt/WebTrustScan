@@ -215,15 +215,40 @@ export default function ReportView({ report }: { report: AuditReport }) {
     };
   }, [printing]);
 
-  const exportJson = () => {
-    const blob = new Blob([JSON.stringify(report, null, 2)], {
-      type: "application/json",
-    });
+  const [pdfState, setPdfState] = useState<"idle" | "working" | "error">("idle");
+
+  const save = (blob: Blob, name: string) => {
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `webtrustscan-${report.target.host}-${report.scannedAt.slice(0, 10)}.json`;
+    link.download = name;
     link.click();
     URL.revokeObjectURL(link.href);
+  };
+
+  // El PDF se genera en el navegador: el informe no se envía a ningún servidor.
+  const downloadPdf = async () => {
+    setPdfState("working");
+
+    try {
+      const { buildReportPdf, pdfFileName } = await import("@/lib/report/pdf");
+      const bytes = await buildReportPdf(report);
+
+      save(
+        new Blob([bytes.buffer as ArrayBuffer], { type: "application/pdf" }),
+        pdfFileName(report),
+      );
+      setPdfState("idle");
+    } catch (error) {
+      console.error(error);
+      setPdfState("error");
+    }
+  };
+
+  const exportJson = () => {
+    save(
+      new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }),
+      `webtrustscan-${report.target.host}-${report.scannedAt.slice(0, 10)}.json`,
+    );
   };
 
   const tab = (value: View, label: string) => (
@@ -269,13 +294,21 @@ export default function ReportView({ report }: { report: AuditReport }) {
             </div>
             <button
               type="button"
+              onClick={downloadPdf}
+              disabled={pdfState === "working"}
+              className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-500 disabled:opacity-60"
+            >
+              {pdfState === "working" ? "Generando PDF…" : "Descargar PDF"}
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 setView("technical");
                 setPrinting(true);
               }}
-              className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-500"
+              className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-500 disabled:opacity-60"
             >
-              Guardar PDF
+              Imprimir
             </button>
             <button
               type="button"
@@ -286,6 +319,13 @@ export default function ReportView({ report }: { report: AuditReport }) {
             </button>
           </div>
         </div>
+
+        {pdfState === "error" && (
+          <p role="alert" className="no-print mt-3 text-sm text-red-300">
+            No se ha podido generar el PDF. Prueba con «Imprimir» y elige
+            «Guardar como PDF».
+          </p>
+        )}
 
         <dl className="mt-5 grid gap-x-8 gap-y-3 border-t border-slate-800 pt-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <div>
@@ -344,8 +384,10 @@ export default function ReportView({ report }: { report: AuditReport }) {
 
       <div className="border-t border-slate-800 pt-8">
         <p className="mb-4 text-sm text-slate-400">
-          El correo y el DNS se puntúan aparte: son riesgos distintos (sobre
-          todo suplantación de identidad) y no deben alterar la nota de la web.
+          <strong className="text-slate-200">Informe independiente.</strong>{" "}
+          La autenticación del correo y el DNS no forman parte de la seguridad
+          de la web: miden si alguien puede suplantar tu dominio al enviar
+          correo. Tienen su propia nota y no alteran la de arriba.
         </p>
         <ReportSection
           id="dns-email"

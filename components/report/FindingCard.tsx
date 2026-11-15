@@ -51,6 +51,15 @@ export default function FindingCard({
                   Severidad {SEVERITY_LABEL[finding.severity].toLowerCase()}
                 </span>
               )}
+              {open && finding.confidence !== "high" && (
+                <span
+                  className={`${chip} border-violet-500/30 bg-violet-500/10 text-violet-200`}
+                  title="Esta conclusión se basa en indicios, no en una prueba directa. Penaliza menos en la puntuación."
+                >
+                  Indicio · confianza{" "}
+                  {CONFIDENCE_LABEL[finding.confidence].toLowerCase()}
+                </span>
+              )}
               <span className={`${chip} ${STATUS_STYLE[finding.status]}`}>
                 {STATUS_LABEL[finding.status]}
               </span>
@@ -72,10 +81,29 @@ export default function FindingCard({
             </div>
           )}
 
+          {/* En el resumen, la evidencia de cada problema va a la vista. */}
+          {!technical && open && finding.evidence.length > 0 && (
+            <dl className="mt-4 space-y-1.5 border-l-2 border-slate-700 pl-3">
+              {finding.evidence.slice(0, 4).map((item, index) => (
+                <div key={`${item.label}-${index}`}>
+                  <dt className="text-xs text-slate-500">{item.label}</dt>
+                  <dd className="break-all font-mono text-xs text-slate-300">
+                    {item.value}
+                  </dd>
+                </div>
+              ))}
+              {finding.evidence.length > 4 && (
+                <p className="text-xs text-slate-500">
+                  +{finding.evidence.length - 4} más en la vista técnica
+                </p>
+              )}
+            </dl>
+          )}
+
           {technical && (
             <details
               className="mt-4 text-sm"
-              open={expanded || undefined}
+              open={expanded || open || undefined}
               key={expanded ? "open" : "closed"}
             >
               <summary className="cursor-pointer text-slate-400 hover:text-slate-200">

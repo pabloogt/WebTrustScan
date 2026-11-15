@@ -2,6 +2,7 @@ import {
   errored,
   fail,
   htmlOnly,
+  info,
   notApplicable,
   pass,
   warning,
@@ -10,7 +11,8 @@ import {
   type ScanContext,
 } from "../context";
 import { parseCsp, upgradesInsecureRequests } from "../parse/csp";
-import { siteOf, type HtmlFacts } from "../parse/html";
+import type { HtmlFacts } from "../parse/html";
+import { classifyResource } from "../parse/thirdParty";
 
 const LIMIT_NOTE =
   " (Se analiza el HTML que entrega el servidor; lo que la web genere después con JavaScript no se ve.)";
@@ -125,36 +127,64 @@ function insecureFormsCheck(context: ScanContext) {
 
 function sriCheck(context: ScanContext) {
   return withHtml(context, (html) => {
-    const site = siteOf(context.finalUrl.hostname);
-    const thirdParty = html.resources.filter(
-      (resource) =>
-        (resource.kind === "script" || resource.kind === "style") &&
-        siteOf(resource.host) !== site,
-    );
+    const assets = html.resources
+      .filter((resource) => resource.kind === "script" || resource.kind === "style")
+      .map((resource) => ({
+        ...resource,
+        origin: classifyResource(resource.url, context.finalUrl.hostname),
+      }));
+    const pinned = assets.filter((asset) => asset.origin === "pinned");
+    const dynamic = assets.filter((asset) => asset.origin === "dynamic");
 
-    if (thirdParty.length === 0) {
+    if (pinned.length === 0 && dynamic.length === 0) {
       return notApplicable(
-        `La página no carga scripts ni estilos de otros dominios, así que no hay nada que verificar con SRI.${LIMIT_NOTE}`,
+        `La página no carga scripts ni estilos de otras organizaciones, así que no hay nada que verificar con SRI.${LIMIT_NOTE}`,
       );
     }
 
-    const missing = thirdParty.filter((resource) => !resource.hasIntegrity);
+    const dynamicEvidence = dynamic.slice(0, 5).map((asset) => ({
+      label: "Tercero sin versión fija (SRI no aplicable)",
+      value: asset.url.slice(0, 200),
+    }));
+
+    if (pinned.length === 0) {
+      // Analítica, publicidad, pagos…: su código cambia y SRI los rompería.
+      // Es un riesgo de cadena de suministro asumido, no un fallo de
+      // configuración, así que se informa sin puntuar.
+      return info(
+        `La página carga ${dynamic.length} script(s) o estilo(s) de terceros que cambian su contenido por diseño (analítica, publicidad, fuentes o similares). SRI no se puede aplicar a ese tipo de recurso, así que no se puntúa. Conviene saber que su código se ejecuta con los mismos permisos que el tuyo.`,
+        {
+          evidence: dynamicEvidence,
+          remediation:
+            "Revisa periódicamente qué terceros cargas y limita con Content-Security-Policy los orígenes desde los que pueden ejecutarse scripts.",
+        },
+      );
+    }
+
+    const missing = pinned.filter((asset) => !asset.hasIntegrity);
 
     if (missing.length === 0) {
       return pass(
-        `Los ${thirdParty.length} scripts y estilos de terceros llevan el atributo integrity.`,
+        `Los ${pinned.length} recursos de terceros con versión fija llevan el atributo integrity.`,
+        { evidence: dynamicEvidence },
       );
     }
 
     return warning(
-      (thirdParty.length - missing.length) / thirdParty.length,
-      `${missing.length} de ${thirdParty.length} scripts o estilos de otros dominios se cargan sin "integrity": si ese proveedor fuera comprometido, su código se ejecutaría en tu web. Algunos servicios (analítica, etiquetas) cambian su código a menudo y no admiten SRI.`,
-      'Añade integrity="sha384-…" y crossorigin="anonymous" a los recursos de terceros con versión fija, o sírvelos desde tu propio dominio.',
+      (pinned.length - missing.length) / pinned.length,
+      `${missing.length} de ${pinned.length} recursos de terceros con versión fija se cargan sin "integrity": si ese CDN fuera comprometido, el código modificado se ejecutaría en la web sin que el navegador lo detecte.`,
+      'Añade integrity="sha384-…" y crossorigin="anonymous" a esas etiquetas (el propio CDN suele ofrecer el valor), o sirve los ficheros desde tu dominio.',
       {
         severity: "low",
-        // No se puede saber desde fuera si el recurso tiene versión fija.
+        // «Versión fija» se deduce de la URL (número de versión o hash).
         confidence: "medium",
-        evidence: sample(missing.map((resource) => resource.url)),
+        evidence: [
+          ...missing.slice(0, 5).map((asset) => ({
+            label: "Sin integrity",
+            value: asset.url.slice(0, 200),
+          })),
+          ...dynamicEvidence,
+        ],
       },
     );
   });

@@ -92,9 +92,18 @@ export type Finding = {
 export type CategoryScore = {
   category: CategoryId;
   label: string;
-  /** null cuando ninguna comprobación de la categoría ha podido puntuar. */
+  /**
+   * 0–100, o null si la categoría tiene menos de MIN_SCORED_PER_CATEGORY
+   * controles evaluados: un porcentaje sobre uno o dos controles engaña.
+   */
   score: number | null;
+  /** Controles evaluados (pass + warning + fail). */
   scored: number;
+  /** De los evaluados, cuántos están correctos. */
+  passed: number;
+  notApplicable: number;
+  /** No comprobados o con error del análisis. */
+  unverified: number;
   total: number;
 };
 
@@ -112,6 +121,13 @@ export type ReportScore = {
   coverage: number;
   /** true si la cobertura es parcial y la cifra debe leerse con cautela. */
   provisional: boolean;
+  /**
+   * Por qué no hay puntuación: cobertura insuficiente o demasiado pocos
+   * controles evaluados para que una cifra signifique algo.
+   */
+  withheld: "coverage" | "controls" | null;
+  /** Controles evaluados (pass + warning + fail) que puntúan. */
+  evaluated: number;
   confidence: Confidence;
   categories: CategoryScore[];
   counts: {

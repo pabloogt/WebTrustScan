@@ -42,6 +42,19 @@ export const FULL_COVERAGE_THRESHOLD = 85;
  */
 export const HIGH_SEVERITY_CAP = 89;
 
+/**
+ * Mínimo de controles evaluados para publicar una puntuación. Con menos, una
+ * cifra de 0 a 100 aparenta una precisión que no tiene (p. ej. un informe de
+ * correo con un único control daría 0 o 100).
+ */
+export const MIN_SCORED_CHECKS: Record<ReportId, number> = {
+  web: 6,
+  "dns-email": 2,
+};
+
+/** Mínimo de controles evaluados para dar un porcentaje por categoría. */
+export const MIN_SCORED_PER_CATEGORY = 3;
+
 const SCORED: ReadonlySet<CheckStatus> = new Set(["pass", "warning", "fail"]);
 const UNVERIFIED: ReadonlySet<CheckStatus> = new Set(["not_tested", "error"]);
 
@@ -96,7 +109,15 @@ function summarize(
   grade: Grade | null,
   coverage: number,
   cap: ReportScore["cap"],
+  withheld: ReportScore["withheld"],
+  evaluated: number,
 ): string {
+  if (withheld === "controls") {
+    return evaluated === 0
+      ? "Ningún control de este informe ha podido evaluarse."
+      : `Solo ${evaluated === 1 ? "se ha evaluado 1 control" : `se han evaluado ${evaluated} controles`} con peso en este informe. Son demasiado pocos para resumirlos en una nota: consulta el resultado de cada uno.`;
+  }
+
   if (score === null || grade === null) {
     return coverage === 0
       ? "No se ha podido comprobar ningún control de este informe."
@@ -108,7 +129,7 @@ function summarize(
   }
 
   const subject =
-    report === "web" ? "La configuración de seguridad web" : "La configuración de DNS y correo";
+    report === "web" ? "La configuración de seguridad web" : "La autenticación del correo";
 
   switch (grade) {
     case "A":
@@ -128,6 +149,7 @@ export function scoreReport(report: ReportId, all: Finding[]): ReportScore {
   const findings = all.filter((finding) => finding.report === report);
   const counts = emptyCounts();
 
+  let evaluated = 0;
   let scoredWeight = 0;
   let unverifiedWeight = 0;
   let confidenceWeighted = 0;
@@ -143,6 +165,7 @@ export function scoreReport(report: ReportId, all: Finding[]): ReportScore {
     if (finding.weight === 0) continue;
 
     if (SCORED.has(finding.status)) {
+      evaluated += 1;
       scoredWeight += finding.weight;
       confidenceWeighted += finding.weight * CONFIDENCE_FACTOR[finding.confidence];
     } else if (UNVERIFIED.has(finding.status)) {
@@ -170,7 +193,15 @@ export function scoreReport(report: ReportId, all: Finding[]): ReportScore {
 
   const rawRatio = ratio(findings);
   const rawScore = rawRatio === null ? null : Math.round(rawRatio);
-  const publishable = rawScore !== null && coverage >= MIN_COVERAGE_FOR_SCORE;
+  const withheld: ReportScore["withheld"] =
+    rawScore === null || evaluated < MIN_SCORED_CHECKS[report]
+      ? applicable > 0 && coverage < MIN_COVERAGE_FOR_SCORE
+        ? "coverage"
+        : "controls"
+      : coverage < MIN_COVERAGE_FOR_SCORE
+        ? "coverage"
+        : null;
+  const publishable = rawScore !== null && withheld === null;
   const score = publishable
     ? Math.min(rawScore, cap ? cap.value : 100)
     : null;
@@ -190,12 +221,22 @@ export function scoreReport(report: ReportId, all: Finding[]): ReportScore {
   const categories: CategoryScore[] = CATEGORY_ORDER[report].map((category) => {
     const own = findings.filter((finding) => finding.category === category);
     const value = ratio(own);
+    const weighted = own.filter(
+      (finding) => SCORED.has(finding.status) && finding.weight > 0,
+    );
 
     return {
       category,
       label: CATEGORY_LABELS[category],
-      score: value === null ? null : Math.round(value),
-      scored: own.filter((finding) => SCORED.has(finding.status)).length,
+      score:
+        value === null || weighted.length < MIN_SCORED_PER_CATEGORY
+          ? null
+          : Math.round(value),
+      scored: weighted.length,
+      passed: weighted.filter((finding) => finding.status === "pass").length,
+      notApplicable: own.filter((finding) => finding.status === "not_applicable")
+        .length,
+      unverified: own.filter((finding) => UNVERIFIED.has(finding.status)).length,
       total: own.length,
     };
   });
@@ -208,10 +249,20 @@ export function scoreReport(report: ReportId, all: Finding[]): ReportScore {
     cap: appliedCap,
     coverage,
     provisional: score !== null && coverage < FULL_COVERAGE_THRESHOLD,
+    withheld,
+    evaluated,
     confidence,
     categories,
     counts,
-    summary: summarize(report, score, grade, coverage, appliedCap),
+    summary: summarize(
+      report,
+      score,
+      grade,
+      coverage,
+      appliedCap,
+      withheld,
+      evaluated,
+    ),
   };
 }
 

@@ -1,3 +1,4 @@
+import { categoryResult, controlCounts } from "@/lib/engine/format";
 import type { ReportScore } from "@/lib/engine/types";
 import {
   CONFIDENCE_LABEL,
@@ -127,6 +128,7 @@ export function ScorePanel({
 
       <div className="min-w-0 space-y-4">
         <p className="text-slate-200">{report.summary}</p>
+        <p className="text-sm text-slate-400">{controlCounts(report)}</p>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <Meter
@@ -148,24 +150,16 @@ export function ScorePanel({
             <li key={category.category}>
               <div className="flex items-baseline justify-between gap-3 text-sm">
                 <span className="text-slate-300">{category.label}</span>
-                <span className="tabular-nums text-slate-400">
-                  {category.score !== null
-                    ? category.score
-                    : category.total > 0 && category.scored === 0
-                      ? "sin evaluar"
-                      : "—"}
+                <span className="text-right tabular-nums text-slate-400">
+                  {categoryResult(category)}
                 </span>
               </div>
-              <div className="mt-1.5">
-                <Bar
-                  value={category.score ?? 0}
-                  tone={
-                    category.score === null
-                      ? "fill-slate-700"
-                      : barColor(category.score)
-                  }
-                />
-              </div>
+              {/* Con menos de tres controles una barra de porcentaje engaña. */}
+              {category.score !== null && (
+                <div className="mt-1.5">
+                  <Bar value={category.score} tone={barColor(category.score)} />
+                </div>
+              )}
             </li>
           ))}
         </ul>

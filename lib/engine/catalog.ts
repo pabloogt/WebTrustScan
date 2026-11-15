@@ -74,7 +74,9 @@ export const CATALOG = [
     category: "transport",
     title: "Protocolos TLS obsoletos",
     summary: "El servidor rechaza TLS 1.0 y TLS 1.1.",
-    severity: "medium",
+    // Solo afecta a clientes obsoletos: los navegadores actuales no
+    // negocian estas versiones.
+    severity: "low",
     weight: 3,
     method: "active",
     references: [REF.tls],
@@ -85,7 +87,7 @@ export const CATALOG = [
     category: "transport",
     title: "Redirección de HTTP a HTTPS",
     summary: "La versión http:// lleva a la versión segura del mismo sitio.",
-    severity: "high",
+    severity: "medium",
     weight: 6,
     method: "active",
     references: [REF.hsts],
@@ -109,7 +111,9 @@ export const CATALOG = [
     category: "headers",
     title: "Content-Security-Policy",
     summary: "Existe una política que limita de dónde se ejecutan scripts.",
-    severity: "high",
+    // Es una defensa en profundidad: su ausencia no es una vulnerabilidad
+    // por sí misma. Pesa mucho en la nota, pero su severidad es media.
+    severity: "medium",
     weight: 10,
     method: "passive",
     references: [REF.csp],
@@ -287,8 +291,10 @@ export const CATALOG = [
     category: "dns",
     title: "Registros CAA",
     summary: "El dominio limita qué autoridades pueden emitir certificados.",
-    severity: "low",
-    weight: 2,
+    // CAA es opcional (RFC 8659) y la mayoría de dominios no lo publica:
+    // se recomienda, pero su ausencia no puntúa.
+    severity: "info",
+    weight: 0,
     method: "passive",
     references: [REF.caa],
   },
@@ -342,7 +348,7 @@ export const CATEGORY_LABELS: Record<CategoryId, string> = {
 
 export const REPORT_LABELS: Record<ReportId, string> = {
   web: "Seguridad web",
-  "dns-email": "DNS y correo",
+  "dns-email": "Correo y DNS",
 };
 
 export const CATEGORY_ORDER: Record<ReportId, CategoryId[]> = {

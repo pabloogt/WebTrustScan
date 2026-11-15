@@ -75,7 +75,7 @@ describe("cabeceras de valor único", () => {
 describe("cookies", () => {
   it("parsea atributos sin conservar el valor", () => {
     const cookie = parseSetCookie(
-      "sid=VALOR-SECRETO; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=3600",
+      "sid=VALOR-SECRETO-9f8e7d6c5b4a; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=3600",
     );
 
     expect(cookie).toEqual({
@@ -86,10 +86,13 @@ describe("cookies", () => {
       domain: null,
       path: "/",
       sessionLifetime: false,
+      sessionSignal: "hint",
       sessionLike: true,
     });
     expect(JSON.stringify(cookie)).not.toContain("VALOR-SECRETO");
-    expect(describeCookie(cookie!)).toBe("sid → Secure; HttpOnly; SameSite=strict");
+    expect(describeCookie(cookie!)).toBe(
+      "sid → Secure; HttpOnly; SameSite=strict · el nombre sugiere sesión y el valor es opaco",
+    );
   });
 
   it.each([

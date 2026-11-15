@@ -1,0 +1,20 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import Panel from "@/components/pro/Panel";
+
+export const metadata: Metadata = { title: "Panel · WebTrustScan" };
+
+export default function PanelPage() {
+  return (
+    <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
+      <div className="mx-auto w-full max-w-5xl">
+        <Link href="/" className="no-print text-sm text-slate-400 hover:text-white">
+          ← Análisis rápido
+        </Link>
+        <div className="mt-6">
+          <Panel />
+        </div>
+      </div>
+    </main>
+  );
+}

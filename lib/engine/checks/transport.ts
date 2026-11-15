@@ -192,9 +192,21 @@ function legacyTlsCheck(context: ScanContext) {
 
   if (probe.outcome === "accepted") {
     return fail(
-      `El servidor todavía acepta conexiones con ${probe.protocol ?? "TLS 1.0/1.1"}, protocolos retirados en 2021 (RFC 8996).`,
-      "Desactiva TLS 1.0 y TLS 1.1 y deja solo TLS 1.2 y 1.3.",
-      { evidence: [{ label: "Saludo TLS 1.0–1.1", value: "aceptado" }] },
+      `El servidor ha completado un saludo limitado a TLS 1.0–1.1 (negoció ${probe.protocol ?? "una de ellas"}), versiones retiradas en 2021 (RFC 8996). Los navegadores actuales no las usan, así que el riesgo práctico se limita a clientes antiguos; aun así, normas como PCI DSS exigen desactivarlas.`,
+      "Desactiva TLS 1.0 y TLS 1.1 y deja solo TLS 1.2 y 1.3. Si das servicio a dispositivos muy antiguos, valora antes el impacto.",
+      {
+        evidence: [
+          { label: "Host", value: context.finalUrl.host },
+          {
+            label: "Saludo TLS limitado a 1.0–1.1",
+            value: `aceptado (${probe.protocol ?? "versión no informada"})`,
+          },
+          {
+            label: "Cómo comprobarlo",
+            value: `openssl s_client -connect ${context.finalUrl.hostname}:443 -servername ${context.finalUrl.hostname} -tls1_1 -cipher 'DEFAULT:@SECLEVEL=0'`,
+          },
+        ],
+      },
     );
   }
 

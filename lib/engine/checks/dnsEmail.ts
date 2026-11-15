@@ -165,12 +165,21 @@ function dmarcCheck(context: ScanContext) {
     }
 
     if (policy === "none") {
-      return warning(
-        0.4,
-        'DMARC está publicado en modo "p=none": solo monitoriza. Los correos que suplantan el dominio se siguen entregando.',
-        'Cuando los informes confirmen que tu correo legítimo pasa SPF/DKIM, cambia a "p=quarantine" y después a "p=reject".',
-        { evidence },
-      );
+      const reports = tag(record, "rua") !== null;
+
+      return reports
+        ? warning(
+            0.4,
+            'DMARC está publicado en modo "p=none" con dirección de informes (rua). Es la primera fase normal de un despliegue: recibes informes de quién envía correo en tu nombre, pero los mensajes que suplantan el dominio todavía se entregan.',
+            'Cuando los informes confirmen que tu correo legítimo pasa SPF o DKIM, cambia a "p=quarantine" y después a "p=reject".',
+            { evidence },
+          )
+        : warning(
+            0.25,
+            'DMARC está publicado en modo "p=none" y sin dirección de informes (rua). Así no protege ni informa: los mensajes que suplantan el dominio se entregan y tú no recibes ningún aviso de ello.',
+            'Añade una dirección de informes ("rua=mailto:…") para ver quién envía correo en tu nombre y, cuando el correo legítimo pase SPF o DKIM, sube la política a "p=quarantine" y después a "p=reject".',
+            { evidence },
+          );
     }
 
     if (Number.isFinite(pct) && pct < 100) {
@@ -201,10 +210,13 @@ function caaCheck(context: ScanContext) {
           `El dominio limita qué autoridades pueden emitir certificados${name && name !== dns.domain ? ` (heredado de ${name})` : ""}.`,
           { evidence: records.map((record) => ({ label: "CAA", value: record })) },
         )
-      : fail(
-          "El dominio no publica registros CAA: cualquier autoridad de certificación puede emitir certificados para él.",
-          'Añade un registro CAA con tu autoridad, por ejemplo: 0 issue "letsencrypt.org".',
-          { evidence: [{ label: "CAA", value: "(sin registros)" }] },
+      : info(
+          "El dominio no publica registros CAA, así que cualquier autoridad de certificación reconocida puede emitir certificados para él. Es la situación por defecto y la de la mayoría de dominios: CAA es una medida opcional que reduce el riesgo de emisiones no deseadas, por lo que su ausencia no puntúa.",
+          {
+            evidence: [{ label: "CAA", value: "(sin registros)" }],
+            remediation:
+              'Si quieres restringirlo, añade un registro CAA con tu autoridad, por ejemplo: 0 issue "letsencrypt.org".',
+          },
         );
   });
 }

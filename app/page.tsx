@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import ReportView from "@/components/report/ReportView";
 import UrlForm from "@/components/UrlForm";
@@ -118,7 +119,19 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
-      <section className="no-print px-6 pt-16 pb-10">
+      <nav
+        aria-label="Cuenta"
+        className="no-print mx-auto flex w-full max-w-6xl justify-end px-6 pt-6"
+      >
+        <Link
+          href="/panel"
+          className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-500"
+        >
+          Mi panel
+        </Link>
+      </nav>
+
+      <section className="no-print px-6 pt-10 pb-10">
         <div className="mx-auto w-full max-w-6xl">
           <div className="mx-auto max-w-3xl text-center">
             <div className="inline-flex rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-slate-300">

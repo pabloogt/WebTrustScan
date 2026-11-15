@@ -67,7 +67,7 @@ function cspCheck(context: ScanContext) {
             { evidence },
           )
         : fail(
-            "La web no tiene Content-Security-Policy: si alguien logra inyectar un script, el navegador lo ejecutará sin restricciones.",
+            "La web no envía Content-Security-Policy. No es una vulnerabilidad por sí misma: es una capa de defensa que falta. Si la web tuviera un fallo de inyección (XSS), el navegador ejecutaría el script inyectado sin ninguna restricción.",
             "Define una Content-Security-Policy. Un buen punto de partida es \"default-src 'self'; object-src 'none'; base-uri 'self'\" y scripts con nonce o hash.",
             { evidence },
           );
@@ -76,13 +76,18 @@ function cspCheck(context: ScanContext) {
     const scripts = assessScripts(enforced);
 
     switch (scripts.strength) {
-      case "unrestricted":
+      case "unrestricted": {
+        const declared = [
+          ...new Set(enforced.flatMap((policy) => [...policy.keys()])),
+        ];
+
         return warning(
           0.25,
-          `La web tiene una CSP${source}, pero no limita desde dónde se ejecutan scripts, que es su función principal.`,
-          'Añade "script-src" (o "default-src") a la política.',
+          `La web aplica una CSP${source}, pero solo declara ${declared.map((name) => `"${name}"`).join(", ")}: ninguna de esas directivas limita desde dónde se ejecutan scripts, que es la función principal de CSP frente a XSS.${reportOnly.length > 0 ? " Además tiene una política más completa en modo Report-Only, que registra pero no bloquea." : ""}`,
+          'Añade "script-src" (o "default-src") a la política aplicada.',
           { evidence, severity: "medium" },
         );
+      }
       case "weak":
         return warning(
           0.5,

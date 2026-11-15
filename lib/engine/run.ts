@@ -406,7 +406,7 @@ export async function runAudit(
       isHtml && primary.body
         ? extractHtmlFacts(primary.body, finalUrl, primary.bodyTruncated)
         : null,
-    cookies: parseCookies(primary.setCookies),
+    cookies: parseCookies(primary.setCookies, now),
     httpProbe,
     corsOrigin: CORS_PROBE_ORIGIN,
     corsProbe,

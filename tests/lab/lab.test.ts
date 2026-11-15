@@ -600,7 +600,7 @@ describe("laboratorio · sitios bien y mal configurados", () => {
           GOOD_HEADERS,
           `<!doctype html><html><body><p>${"Texto de relleno. ".repeat(20)}</p>
            <script src="http://cdn.example.org/lib.js"></script>
-           <script src="https://cdn.example.org/otra.js"></script>
+           <script src="https://cdn.example.org/lib@2.1.0/otra.js"></script>
            <!-- <script src="http://comentado.example/x.js"></script> -->
            <form action="http://s18-content.lab.test/login" method="post">
              <input type="text" name="user"><input type="password" name="pass">
@@ -697,8 +697,9 @@ describe("laboratorio · problemas DNS y del propio análisis", () => {
       },
     });
     expect(status(weak, "email.spf")).toBe("fail");
-    expect(finding(weak, "email.dmarc").credit).toBe(0.4);
-    expect(status(weak, "dns.caa")).toBe("fail");
+    expect(finding(weak, "email.dmarc").credit).toBe(0.25);
+    // CAA ausente es informativo: no puntúa.
+    expect(status(weak, "dns.caa")).toBe("info");
     expect(weak.dnsEmail.grade).toBe("F");
     // Un correo mal configurado no baja la nota de seguridad web.
     expect(weak.web.score).toBe(100);

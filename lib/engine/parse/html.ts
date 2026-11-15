@@ -33,13 +33,38 @@ const TAG =
 const ATTRIBUTE =
   /([^\s"'=<>/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g;
 
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: "&",
+  quot: '"',
+  apos: "'",
+  lt: "<",
+  gt: ">",
+};
+
+/** Decodifica las entidades HTML habituales en valores de atributo. */
+export function decodeEntities(value: string): string {
+  return value.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, entity: string) => {
+    if (entity[0] !== "#") return NAMED_ENTITIES[entity.toLowerCase()] ?? match;
+
+    const code =
+      entity[1].toLowerCase() === "x"
+        ? parseInt(entity.slice(2), 16)
+        : parseInt(entity.slice(1), 10);
+
+    return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match;
+  });
+}
+
 function attributes(raw: string): Map<string, string> {
   const result = new Map<string, string>();
 
   for (const match of raw.matchAll(ATTRIBUTE)) {
     const name = match[1].toLowerCase();
     if (!result.has(name)) {
-      result.set(name, (match[2] ?? match[3] ?? match[4] ?? "").trim());
+      result.set(
+        name,
+        decodeEntities(match[2] ?? match[3] ?? match[4] ?? "").trim(),
+      );
     }
   }
 
