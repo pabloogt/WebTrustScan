@@ -19,7 +19,7 @@ function getStatusStyles(status: CheckStatus) {
 function getStatusLabel(status: CheckStatus) {
   if (status === "pass") return "Correcto";
   if (status === "warn") return "A revisar";
-  return "Importante";
+  return "No superado";
 }
 
 function getStatusIcon(status: CheckStatus) {
@@ -38,6 +38,7 @@ export default function ChecksList({ checks }: ChecksListProps) {
         >
           <div className="flex items-start gap-4">
             <div
+              aria-hidden="true"
               className={`mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-base font-bold ${getStatusStyles(
                 check.status,
               )}`}

@@ -8,8 +8,6 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -22,5 +20,39 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+}
+
+/* Informe en PDF: se imprime la vista técnica en claro y sin la portada. */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  * {
+    background: transparent !important;
+    color: #111827 !important;
+    border-color: #d1d5db !important;
+    box-shadow: none !important;
+  }
+
+  body {
+    background: #ffffff !important;
+  }
+
+  svg circle,
+  svg rect {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .finding {
+    break-inside: avoid;
+  }
+
+  @page {
+    margin: 14mm;
+  }
 }

@@ -68,6 +68,17 @@ export default function ScoreOverview({ result }: ScoreOverviewProps) {
         <p className="text-sm text-slate-400">URL final analizada</p>
         <p className="mt-2 text-lg font-medium break-all">{result.url}</p>
 
+        {result.httpStatus >= 400 && (
+          <p
+            role="status"
+            className="mt-4 rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-200"
+          >
+            La web respondió con un error HTTP {result.httpStatus}. El análisis
+            corresponde a esa página de error, no a la web funcionando con
+            normalidad.
+          </p>
+        )}
+
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
           <div className="rounded-xl bg-slate-800 p-4">
             <p className="text-sm text-slate-400">Checks totales</p>

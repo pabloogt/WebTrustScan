@@ -1,0 +1,501 @@
+[
+  {
+    "id": "s01-good",
+    "title": "Web correctamente configurada",
+    "legacy": "100",
+    "score": 100,
+    "grade": "A",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "ok",
+    "open": [],
+    "unverified": []
+  },
+  {
+    "id": "s02-no-headers",
+    "title": "HTTPS con cabeceras deficientes",
+    "legacy": "39",
+    "score": 58,
+    "grade": "D",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "ok",
+    "open": [
+      "transport.hsts:fail",
+      "headers.csp:fail",
+      "headers.clickjacking:fail",
+      "headers.nosniff:fail",
+      "headers.permissions-policy:fail"
+    ],
+    "unverified": []
+  },
+  {
+    "id": "s03-expired",
+    "title": "Certificado caducado (resto perfecto)",
+    "legacy": "error TLS_ERROR",
+    "score": 30,
+    "grade": "F",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": 30,
+    "condition": "ok",
+    "open": [
+      "transport.certificate:fail"
+    ],
+    "unverified": []
+  },
+  {
+    "id": "s03b-wronghost",
+    "title": "Certificado de otro dominio",
+    "legacy": "error TLS_ERROR",
+    "score": 30,
+    "grade": "F",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": 30,
+    "condition": "ok",
+    "open": [
+      "transport.certificate:fail"
+    ],
+    "unverified": []
+  },
+  {
+    "id": "s03c-selfsigned",
+    "title": "Certificado autofirmado",
+    "legacy": "error TLS_ERROR",
+    "score": 30,
+    "grade": "F",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": 30,
+    "condition": "ok",
+    "open": [
+      "transport.certificate:fail"
+    ],
+    "unverified": []
+  },
+  {
+    "id": "s04-csp-weak",
+    "title": "CSP con unsafe-inline y comodín",
+    "legacy": "93",
+    "score": 93,
+    "grade": "A",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "ok",
+    "open": [
+      "headers.csp:warning"
+    ],
+    "unverified": []
+  },
+  {
+    "id": "s04b-csp-ro",
+    "title": "CSP solo en Report-Only",
+    "legacy": "88",
+    "score": 83,
+    "grade": "B",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "ok",
+    "open": [
+      "headers.csp:warning",
+      "headers.clickjacking:warning"
+    ],
+    "unverified": []
+  },
+  {
+    "id": "s04c-csp-frames",
+    "title": "CSP que solo declara frame-ancestors",
+    "legacy": "93",
+    "score": 90,
+    "grade": "A",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "ok",
+    "open": [
+      "headers.csp:warning"
+    ],
+    "unverified": []
+  },
+  {
+    "id": "s04d-csp-meta",
+    "title": "CSP en etiqueta <meta> (hosting estático)",
+    "legacy": "75",
+    "score": 92,
+    "grade": "A",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "ok",
+    "open": [
+      "headers.clickjacking:fail"
+    ],
+    "unverified": []
+  },
+  {
+    "id": "s05-hsts-zero",
+    "title": "HSTS con max-age=0",
+    "legacy": "89",
+    "score": 89,
+    "grade": "B",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "ok",
+    "open": [
+      "transport.hsts:fail"
+    ],
+    "unverified": []
+  },
+  {
+    "id": "s05b-hsts-short",
+    "title": "HSTS de 1 día",
+    "legacy": "94",
+    "score": 95,
+    "grade": "A",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "ok",
+    "open": [
+      "transport.hsts:warning"
+    ],
+    "unverified": []
+  },
+  {
+    "id": "s05c-duplicated",
+    "title": "Cabeceras duplicadas (CDN + origen)",
+    "legacy": "83",
+    "score": 100,
+    "grade": "A",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "ok",
+    "open": [],
+    "unverified": []
+  },
+  {
+    "id": "s06-cookies",
+    "title": "Cookies mal configuradas",
+    "legacy": "100",
+    "score": 89,
+    "grade": "B",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "ok",
+    "open": [
+      "cookies.secure:fail",
+      "cookies.httponly:fail",
+      "cookies.samesite:warning"
+    ],
+    "unverified": []
+  },
+  {
+    "id": "s07-cors-reflect",
+    "title": "CORS: refleja el origen con credenciales",
+    "legacy": "100",
+    "score": 89,
+    "grade": "B",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": 89,
+    "condition": "ok",
+    "open": [
+      "cors.policy:fail"
+    ],
+    "unverified": []
+  },
+  {
+    "id": "s07b-cors-public",
+    "title": "CORS: * sin credenciales",
+    "legacy": "100",
+    "score": 100,
+    "grade": "A",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "ok",
+    "open": [],
+    "unverified": []
+  },
+  {
+    "id": "s08-static",
+    "title": "Web estática sin cookies ni formularios",
+    "legacy": "100",
+    "score": 100,
+    "grade": "A",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "ok",
+    "open": [],
+    "unverified": []
+  },
+  {
+    "id": "s09-api-401",
+    "title": "API JSON con 401",
+    "legacy": "61",
+    "score": 100,
+    "grade": "A",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "auth-required",
+    "open": [],
+    "unverified": []
+  },
+  {
+    "id": "s09b-api-403",
+    "title": "API JSON con 403 sin nosniff",
+    "legacy": "39",
+    "score": 78,
+    "grade": "B",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "auth-required",
+    "open": [
+      "transport.hsts:fail",
+      "headers.nosniff:fail"
+    ],
+    "unverified": []
+  },
+  {
+    "id": "s10-cdn-block",
+    "title": "CDN/WAF bloquea al analizador (403 challenge)",
+    "legacy": "39",
+    "score": null,
+    "grade": null,
+    "coverage": 34,
+    "confidence": "low",
+    "cap": null,
+    "condition": "blocked",
+    "open": [],
+    "unverified": [
+      "transport.hsts",
+      "headers.csp",
+      "headers.clickjacking",
+      "headers.nosniff",
+      "headers.referrer-policy",
+      "headers.permissions-policy",
+      "headers.cross-origin-isolation",
+      "cookies.secure",
+      "cookies.httponly",
+      "cookies.samesite",
+      "cors.policy",
+      "content.mixed-content",
+      "content.insecure-forms",
+      "content.sri",
+      "disclosure.banner"
+    ]
+  },
+  {
+    "id": "s10b-cdn-ok",
+    "title": "Sitio servido por CDN",
+    "legacy": "100",
+    "score": 100,
+    "grade": "A",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "ok",
+    "open": [],
+    "unverified": []
+  },
+  {
+    "id": "s11-429",
+    "title": "Respuesta 429",
+    "legacy": "39",
+    "score": null,
+    "grade": null,
+    "coverage": 34,
+    "confidence": "low",
+    "cap": null,
+    "condition": "rate-limited",
+    "open": [],
+    "unverified": [
+      "transport.hsts",
+      "headers.csp",
+      "headers.clickjacking",
+      "headers.nosniff",
+      "headers.referrer-policy",
+      "headers.permissions-policy",
+      "headers.cross-origin-isolation",
+      "cookies.secure",
+      "cookies.httponly",
+      "cookies.samesite",
+      "cors.policy",
+      "content.mixed-content",
+      "content.insecure-forms",
+      "content.sri",
+      "disclosure.banner"
+    ]
+  },
+  {
+    "id": "s12-redirects",
+    "title": "Redirecciones múltiples",
+    "legacy": "100",
+    "score": 100,
+    "grade": "A",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "ok",
+    "open": [],
+    "unverified": []
+  },
+  {
+    "id": "s14-frame-ancestors",
+    "title": "frame-ancestors correcto, sin X-Frame-Options",
+    "legacy": "100",
+    "score": 100,
+    "grade": "A",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "ok",
+    "open": [],
+    "unverified": []
+  },
+  {
+    "id": "s15-503",
+    "title": "Error temporal 503",
+    "legacy": "39",
+    "score": null,
+    "grade": null,
+    "coverage": 34,
+    "confidence": "low",
+    "cap": null,
+    "condition": "server-error",
+    "open": [],
+    "unverified": [
+      "transport.hsts",
+      "headers.csp",
+      "headers.clickjacking",
+      "headers.nosniff",
+      "headers.referrer-policy",
+      "headers.permissions-policy",
+      "headers.cross-origin-isolation",
+      "cookies.secure",
+      "cookies.httponly",
+      "cookies.samesite",
+      "cors.policy",
+      "content.mixed-content",
+      "content.insecure-forms",
+      "content.sri",
+      "disclosure.banner"
+    ]
+  },
+  {
+    "id": "s15b-http-hang",
+    "title": "Versión http:// que no responde (timeout)",
+    "legacy": "94",
+    "score": 100,
+    "grade": "A",
+    "coverage": 92,
+    "confidence": "high",
+    "cap": null,
+    "condition": "ok",
+    "open": [],
+    "unverified": [
+      "transport.http-redirect"
+    ]
+  },
+  {
+    "id": "s16-http-closed",
+    "title": "Puerto HTTP cerrado (solo HTTPS)",
+    "legacy": "94",
+    "score": 100,
+    "grade": "A",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "ok",
+    "open": [],
+    "unverified": []
+  },
+  {
+    "id": "s17-http-only",
+    "title": "Web solo HTTP",
+    "legacy": "55",
+    "score": 35,
+    "grade": "F",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": 35,
+    "condition": "ok",
+    "open": [
+      "transport.https:fail"
+    ],
+    "unverified": []
+  },
+  {
+    "id": "s17b-https-closed",
+    "title": "https:// cerrado, http:// disponible",
+    "legacy": "error UNREACHABLE",
+    "score": 35,
+    "grade": "F",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": 35,
+    "condition": "ok",
+    "open": [
+      "transport.https:fail"
+    ],
+    "unverified": []
+  },
+  {
+    "id": "s18-content",
+    "title": "Contenido mixto y formulario inseguro",
+    "legacy": "100",
+    "score": 86,
+    "grade": "B",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "ok",
+    "open": [
+      "content.mixed-content:fail",
+      "content.insecure-forms:fail",
+      "content.sri:warning"
+    ],
+    "unverified": []
+  },
+  {
+    "id": "s19-banner",
+    "title": "Versiones de software expuestas",
+    "legacy": "100",
+    "score": 99,
+    "grade": "A",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "ok",
+    "open": [
+      "disclosure.banner:fail"
+    ],
+    "unverified": []
+  },
+  {
+    "id": "s20-legacy-tls",
+    "title": "Servidor que acepta TLS 1.0/1.1",
+    "legacy": "100",
+    "score": 96,
+    "grade": "A",
+    "coverage": 100,
+    "confidence": "high",
+    "cap": null,
+    "condition": "ok",
+    "open": [
+      "transport.legacy-tls:fail"
+    ],
+    "unverified": []
+  }
+]

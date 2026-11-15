@@ -1,95 +1,68 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import ChecksList from "@/components/ChecksList";
-import ScoreOverview from "@/components/ScoreOverview";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import ReportView from "@/components/report/ReportView";
 import UrlForm from "@/components/UrlForm";
-import { AuditResult } from "@/types/audit";
+import {
+  CATALOG,
+  CATEGORY_LABELS,
+  CATEGORY_ORDER,
+} from "@/lib/engine/catalog";
+import type { AuditReport } from "@/lib/engine/types";
+import { normalizeUrl } from "@/lib/normalizeUrl";
 
-function isProbablyValidUrl(value: string) {
-  const trimmed = value.trim();
-
-  if (!trimmed) return false;
-
+/** Devuelve el mensaje de error de validación, o null si la URL es válida. */
+function validateUrl(value: string): string | null {
   try {
-    const candidate =
-      trimmed.startsWith("http://") || trimmed.startsWith("https://")
-        ? trimmed
-        : `https://${trimmed}`;
-
-    const parsed = new URL(candidate);
-    return Boolean(parsed.hostname);
-  } catch {
-    return false;
+    normalizeUrl(value);
+    return null;
+  } catch (error) {
+    return error instanceof Error
+      ? error.message
+      : "La URL no parece válida. Prueba algo como ejemplo.com";
   }
 }
 
 const features = [
   {
-    title: "Análisis en segundos",
+    title: "Puntuación que se puede explicar",
     description:
-      "Introduce una URL y obtén una revisión rápida de señales básicas de seguridad y confianza.",
+      "Cada punto perdido corresponde a un hallazgo concreto, con su severidad y su evidencia. Lo que no aplica a tu web no cuenta.",
   },
   {
-    title: "Resultados claros",
+    title: "Distingue fallo de «no comprobado»",
     description:
-      "Entiende qué está bien, qué falla y qué deberías priorizar sin perderte en lenguaje técnico.",
+      "Si un WAF bloquea el análisis o el servidor da un error temporal, no te ponemos mala nota: te decimos qué no se pudo ver.",
   },
   {
     title: "Correcciones accionables",
     description:
-      "Cada hallazgo incluye una recomendación concreta para que sepas cómo empezar a arreglarlo.",
+      "Cada hallazgo incluye la cabecera o el ajuste exacto que lo resuelve, y una vista técnica con las evidencias.",
   },
 ];
 
-const checksPreview = [
-  {
-    title: "HTTPS activo",
-    description:
-      "Comprueba si la web usa una conexión segura para proteger los datos del usuario.",
-  },
-  {
-    title: "Redirección de HTTP a HTTPS",
-    description:
-      "Revisa si la versión insegura de la web redirige automáticamente a la versión segura.",
-  },
-  {
-    title: "Strict-Transport-Security",
-    description:
-      "Indica si el navegador debe recordar que esta web solo debe abrirse con conexión segura.",
-  },
-  {
-    title: "Content-Security-Policy",
-    description:
-      "Ayuda a limitar scripts y recursos peligrosos que podrían cargarse en la web.",
-  },
-  {
-    title: "X-Frame-Options",
-    description:
-      "Protege la web para que no pueda mostrarse dentro de páginas maliciosas.",
-  },
-  {
-    title: "X-Content-Type-Options",
-    description:
-      "Evita que el navegador interprete archivos de una forma insegura.",
-  },
-  {
-    title: "Referrer-Policy",
-    description:
-      "Controla qué información comparte el navegador cuando el usuario sale a otra web.",
-  },
-  {
-    title: "Permissions-Policy",
-    description:
-      "Limita permisos del navegador como cámara, micrófono o ubicación.",
-  },
-];
+/** «Qué analiza»: se genera a partir del catálogo real del motor. */
+const coverage = [...CATEGORY_ORDER.web, ...CATEGORY_ORDER["dns-email"]].map(
+  (category) => ({
+    category,
+    label: CATEGORY_LABELS[category],
+    checks: CATALOG.filter((check) => check.category === category),
+  }),
+);
 
 export default function Home() {
   const [url, setUrl] = useState("");
-  const [result, setResult] = useState<AuditResult | null>(null);
+  const [result, setResult] = useState<AuditReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const reportRef = useRef<HTMLElement>(null);
+
+  // Al terminar un análisis se lleva al usuario al informe.
+  useEffect(() => {
+    if (result) {
+      reportRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [result]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -104,9 +77,11 @@ export default function Home() {
       return;
     }
 
-    if (!isProbablyValidUrl(trimmedUrl)) {
+    const validationError = validateUrl(trimmedUrl);
+
+    if (validationError) {
       setResult(null);
-      setErrorMessage("La URL no parece válida. Prueba algo como ejemplo.com");
+      setErrorMessage(validationError);
       return;
     }
 
@@ -121,10 +96,10 @@ export default function Home() {
         body: JSON.stringify({ url: trimmedUrl }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
 
-      if (!response.ok) {
-        throw new Error(data.error || "No se pudo analizar la URL.");
+      if (!response.ok || !data) {
+        throw new Error(data?.error || "No se pudo analizar la URL.");
       }
 
       setResult(data);
@@ -143,21 +118,21 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
-      <section className="px-6 pt-16 pb-10">
+      <section className="no-print px-6 pt-16 pb-10">
         <div className="mx-auto w-full max-w-6xl">
           <div className="mx-auto max-w-3xl text-center">
             <div className="inline-flex rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-slate-300">
-              WebTrustScan · revisión básica de seguridad web
+              WebTrustScan · auditoría de configuración de seguridad web
             </div>
 
             <h1 className="mt-6 text-4xl font-bold tracking-tight md:text-6xl">
-              Detecta en minutos si tu web falla en seguridad básica y confianza
+              Comprueba la configuración de seguridad de tu web, con evidencias
             </h1>
 
             <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-300">
-              WebTrustScan analiza tu web y te muestra de forma clara los fallos
-              básicos que pueden afectar a la seguridad, la configuración y la
-              confianza que transmite.
+              Cifrado, cabeceras, cookies, CORS, contenido y correo. Una
+              puntuación coherente, qué significa cada hallazgo y cómo
+              arreglarlo.
             </p>
           </div>
 
@@ -193,59 +168,68 @@ export default function Home() {
       </section>
 
       {result && (
-        <section className="px-6 py-8">
-          <div className="mx-auto w-full max-w-5xl space-y-6">
-            <ScoreOverview result={result} />
-            <ChecksList checks={result.checks} />
+        <section ref={reportRef} className="scroll-mt-6 px-6 py-8">
+          <div className="mx-auto w-full max-w-5xl">
+            <ReportView report={result} />
           </div>
         </section>
       )}
 
-      <section className="px-6 py-14">
+      <section className="no-print px-6 py-14">
         <div className="mx-auto grid w-full max-w-5xl gap-6 rounded-3xl border border-slate-800 bg-slate-900 p-8 lg:grid-cols-[1.2fr_0.8fr]">
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-slate-400">
               Qué analiza
             </p>
             <h2 className="mt-3 text-2xl font-bold">
-              Una revisión inicial pensada para detectar fallos básicos rápido
+              {CATALOG.length} controles, cada uno con su evidencia
             </h2>
             <p className="mt-4 max-w-2xl text-slate-300">
-              WebTrustScan no sustituye una auditoría profesional completa, pero
-              sí te ayuda a detectar rápidamente errores comunes de
-              configuración que pueden debilitar la seguridad básica de una web
-              o hacer que transmita menos confianza.
+              WebTrustScan observa tu web como lo haría un visitante: una
+              petición normal y, como mucho, cuatro comprobaciones adicionales
+              inocuas. No intenta explotar nada ni accede a zonas privadas.
+            </p>
+            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-400">
+              No sustituye a una prueba de intrusión ni certifica que una web
+              sea segura: mide si su configuración visible sigue las buenas
+              prácticas de OWASP, MDN y los RFC aplicables. Analiza solo webs
+              tuyas o para las que tengas permiso.
             </p>
           </div>
 
           <div className="grid gap-3">
-            {checksPreview.map((item, index) => (
+            {coverage.map((group) => (
               <details
-                key={index}
+                key={group.category}
                 className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-200"
               >
                 <summary className="cursor-pointer font-medium list-none">
                   <div className="flex items-center justify-between gap-3">
-                    <span>{item.title}</span>
-                    <span className="text-slate-500">+</span>
+                    <span>{group.label}</span>
+                    <span className="text-slate-500">
+                      {group.checks.length} controles
+                    </span>
                   </div>
                 </summary>
 
-                <p className="mt-3 text-slate-400 leading-6">
-                  {item.description}
-                </p>
+                <ul className="mt-3 space-y-2 text-slate-400">
+                  {group.checks.map((check) => (
+                    <li key={check.id} className="leading-6">
+                      <span className="text-slate-200">{check.title}.</span>{" "}
+                      {check.summary}
+                    </li>
+                  ))}
+                </ul>
               </details>
             ))}
           </div>
         </div>
       </section>
 
-      <footer className="border-t border-slate-800 px-6 py-8">
+      <footer className="no-print border-t border-slate-800 px-6 py-8">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 text-sm text-slate-400 sm:flex-row sm:items-center sm:justify-between">
-          <p>WebTrustScan · MVP inicial</p>
-          <p>
-            Auditoría básica para detectar fallos de seguridad y confianza web
-          </p>
+          <p>WebTrustScan · Engine 2.0</p>
+          <p>Auditoría externa de configuración. No es un pentest.</p>
         </div>
       </footer>
     </main>
