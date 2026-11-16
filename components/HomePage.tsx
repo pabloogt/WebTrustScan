@@ -61,6 +61,7 @@ export default function HomePage({
   const [result, setResult] = useState<AuditReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [quota, setQuota] = useState<{ remaining: number; limit: number } | null>(null);
   const reportRef = useRef<HTMLElement>(null);
 
   // Al terminar un análisis se lleva al usuario al informe.
@@ -99,7 +100,9 @@ export default function HomePage({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ url: trimmedUrl }),
+        // Identificador único de esta petición: si la red falla y se
+        // reintenta, el servidor no consume ni ejecuta el análisis dos veces.
+        body: JSON.stringify({ url: trimmedUrl, requestId: crypto.randomUUID() }),
       });
 
       const data = await response.json().catch(() => null);
@@ -109,6 +112,7 @@ export default function HomePage({
       }
 
       setResult(data);
+      setQuota(data.quota ?? null);
     } catch (error) {
       console.error(error);
       setResult(null);
@@ -133,7 +137,7 @@ export default function HomePage({
             href="/panel"
             className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-500"
           >
-            Mi panel
+            Mi cuenta
           </Link>
         </nav>
       )}
@@ -168,6 +172,13 @@ export default function HomePage({
               onSubmit={handleSubmit}
             />
           </div>
+
+          {quota && (
+            <p role="status" className="mx-auto mt-4 max-w-4xl text-center text-sm text-slate-400">
+              Análisis guardado en tu historial. Te quedan {quota.remaining} de{" "}
+              {quota.limit} en este periodo.
+            </p>
+          )}
 
           {!result && (
             <div className="mx-auto mt-10 grid max-w-5xl gap-4 md:grid-cols-3">

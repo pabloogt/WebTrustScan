@@ -1,15 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import AccessForm from "@/components/pro/AccessForm";
-
-import { accountsEnabled } from "@/lib/pro/config";
+import { redirect } from "next/navigation";
+import AccessForm from "@/components/account/AccessForm";
+import { pageSession } from "@/lib/accounts/pageSession";
 
 export const metadata: Metadata = { title: "Acceso · WebTrustScan" };
 
-export default function AccessPage() {
-  // Las cuentas están desactivadas por defecto (ver lib/pro/config.ts).
-  if (!accountsEnabled()) notFound();
+export default async function AccessPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ estado?: string }>;
+}) {
+  if (await pageSession()) redirect("/panel");
+
+  const { estado } = await searchParams;
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-16 text-white">
@@ -19,11 +23,11 @@ export default function AccessPage() {
         </Link>
         <h1 className="mt-6 text-3xl font-bold">Tu cuenta</h1>
         <p className="mt-2 text-slate-300">
-          Guarda tus dominios, conserva el historial de auditorías y compara
-          cómo evoluciona su configuración.
+          Guarda el historial de tus análisis y consulta sus informes cuando
+          quieras.
         </p>
         <div className="mt-8">
-          <AccessForm />
+          <AccessForm notice={estado} />
         </div>
       </div>
     </main>

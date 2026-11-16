@@ -1,8 +1,29 @@
-import { getAudit } from "@/lib/pro/audits";
-import { json, requireSession, route } from "@/lib/pro/http";
+import { AccountError, isUuid, json, requireUser, route } from "@/lib/accounts/http";
+import { enforceLimit } from "@/lib/limits";
+import { RATE_LIMITS } from "@/lib/plans";
 
-export const GET = route<{ id: string }>(async ({ request, db, params }) => {
-  const session = await requireSession(db, request);
+// Un análisis ajeno responde igual que uno inexistente: no se revela que el
+// identificador es válido.
+const notFound = () => new AccountError(404, "El análisis no existe.");
 
-  return json(await getAudit(db, session.organization.id, params.id));
+export const GET = route<{ id: string }>(async ({ deps, params }) => {
+  const user = await requireUser(deps);
+
+  await enforceLimit("account-read", user.id, RATE_LIMITS.accountReads);
+  if (!isUuid(params.id)) throw notFound();
+
+  const audit = await deps.data.getAudit(params.id);
+  if (!audit) throw notFound();
+
+  return json(audit);
+});
+
+export const DELETE = route<{ id: string }>(async ({ deps, params }) => {
+  const user = await requireUser(deps);
+
+  await enforceLimit("account-change", user.id, RATE_LIMITS.accountChanges);
+  if (!isUuid(params.id) || !(await deps.data.deleteAudit(params.id))) throw notFound();
+
+  // Borrar del historial no devuelve el análisis a la cuota.
+  return json({ ok: true });
 });

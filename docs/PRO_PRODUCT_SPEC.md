@@ -1,6 +1,6 @@
 # PRO_PRODUCT_SPEC — WebTrustScan Pro
 
-> **PLANIFICACIÓN POSPUESTA (15-11-2026).** Este documento recoge ideas y análisis para una posible evolución comercial. **No describe el estado actual del producto ni autoriza a desarrollarlo.** Las cuentas están implementadas pero desactivadas por defecto; pagos, suscripciones, monitorización, alertas y gestión de clientes no están implementados; no hay ningún servicio externo contratado ni conectado. Estado real: `HANDOFF.md` y `AUTH_STORAGE_AUDIT.md`.
+> **DOCUMENTO DE PLANIFICACIÓN, PARCIALMENTE SUPERADO (16-11-2026).** Recoge análisis previos a la arquitectura actual. Lo que diga sobre autenticación propia, PGlite, Neon, dominios guardados u organizaciones **ya no es cierto**: hoy las cuentas usan Supabase Auth y PostgreSQL con RLS, los planes son Free y Pro, y no hay pagos. Estado real: `HANDOFF.md`, `SECURITY_ACCOUNTS.md`, `PLANS_AND_QUOTAS.md` y `STRIPE_NEXT_PHASE.md`.
 
 **Estado:** especificación. En esta fase solo se ha construido lo que no necesita cuentas ni base de datos: el motor, el informe con vistas ejecutiva y técnica, la exportación a JSON y la impresión a PDF desde el navegador. Todo lo demás requiere decisiones tuyas (servicios, coste, legal) y está marcado como tal.
 

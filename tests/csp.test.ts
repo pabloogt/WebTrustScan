@@ -106,24 +106,24 @@ describe("proxy", () => {
   const nonceOf = (policy: string | null) =>
     /'nonce-([^']+)'/.exec(policy ?? "")?.[1];
 
-  it("añade a la respuesta una CSP con nonce y sin 'unsafe-inline'", () => {
+  it("añade a la respuesta una CSP con nonce y sin 'unsafe-inline'", async () => {
     vi.stubEnv("NODE_ENV", "production");
-    const policy = run().headers.get("content-security-policy");
+    const policy = (await run()).headers.get("content-security-policy");
 
     expect(nonceOf(policy)).toBeTruthy();
     expect(policy).not.toContain("'unsafe-inline'");
     expect(policy).not.toContain("'unsafe-eval'");
   });
 
-  it("usa un nonce distinto en cada petición", () => {
-    const first = nonceOf(run().headers.get("content-security-policy"));
-    const second = nonceOf(run().headers.get("content-security-policy"));
+  it("usa un nonce distinto en cada petición", async () => {
+    const first = nonceOf((await run()).headers.get("content-security-policy"));
+    const second = nonceOf((await run()).headers.get("content-security-policy"));
 
     expect(first).not.toBe(second);
   });
 
-  it("pasa a Next.js el mismo nonce que envía al navegador", () => {
-    const response = run();
+  it("pasa a Next.js el mismo nonce que envía al navegador", async () => {
+    const response = await run();
     const sent = nonceOf(response.headers.get("content-security-policy"));
     const forwarded = response.headers.get(
       "x-middleware-request-content-security-policy",
@@ -133,7 +133,7 @@ describe("proxy", () => {
     expect(response.headers.get("x-middleware-request-x-nonce")).toBe(sent);
   });
 
-  it("no se aplica a la API ni a los estáticos", () => {
+  it("no se aplica a la API ni a los estáticos", async () => {
     const source = new RegExp(`^${config.matcher[0].source}$`);
 
     expect(source.test("/")).toBe(true);
@@ -145,7 +145,7 @@ describe("proxy", () => {
 });
 
 describe("CSP de la API", () => {
-  it("no permite cargar ni enmarcar nada", () => {
+  it("no permite cargar ni enmarcar nada", async () => {
     const parsed = directives(API_CONTENT_SECURITY_POLICY);
 
     expect(parsed.get("default-src")).toEqual(["'none'"]);

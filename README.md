@@ -6,7 +6,7 @@ Cada hallazgo lleva severidad, evidencia y solución. La puntuación (0–100, n
 
 No es una prueba de intrusión ni una certificación: evalúa lo observable desde fuera, sin autenticarse y con un máximo de cinco peticiones inocuas y un saludo TLS por versión de protocolo.
 
-Las cuentas (dominios guardados, historial, comparación) están implementadas pero **desactivadas por defecto**: solo el analizador es público. Ver [`docs/AUTH_STORAGE_AUDIT.md`](docs/AUTH_STORAGE_AUDIT.md).
+Las cuentas (historial de análisis, planes Free y Pro con cuota) usan Supabase y están **desactivadas por defecto**: solo el analizador es público. Ver [`docs/HANDOFF.md`](docs/HANDOFF.md).
 
 ## Qué comprueba
 
@@ -34,7 +34,11 @@ Documentación en [`docs/`](docs/):
 | [CHECK_CATALOG.md](docs/CHECK_CATALOG.md) | Controles implementados, aprobados y descartados |
 | [TESTING_REPORT.md](docs/TESTING_REPORT.md) | Laboratorio y verificación |
 | [CALIBRATION_REPORT.md](docs/CALIBRATION_REPORT.md) | Calibración con dos análisis reales |
-| [AUTH_STORAGE_AUDIT.md](docs/AUTH_STORAGE_AUDIT.md) | Cuentas, contraseñas, sesiones y almacenamiento |
+| [SETUP_SUPABASE.md](docs/SETUP_SUPABASE.md) | Base de datos y autenticación: local y nube |
+| [SECURITY_ACCOUNTS.md](docs/SECURITY_ACCOUNTS.md) | Autenticación, sesiones, roles, RLS y pruebas de aislamiento |
+| [PLANS_AND_QUOTAS.md](docs/PLANS_AND_QUOTAS.md) | Free, Pro, consumo y prevención de abuso |
+| [ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md) | Variables y entornos |
+| [STRIPE_NEXT_PHASE.md](docs/STRIPE_NEXT_PHASE.md) | Facturación, fase futura |
 | [HANDOFF.md](docs/HANDOFF.md) | Estado actual y continuidad |
 | [PRO_PRODUCT_SPEC.md](docs/PRO_PRODUCT_SPEC.md) · [PRO_SERVICES.md](docs/PRO_SERVICES.md) · [COST_ANALYSIS.md](docs/COST_ANALYSIS.md) · [ROADMAP.md](docs/ROADMAP.md) | Planificación comercial, **pospuesta** |
 
@@ -53,6 +57,9 @@ npm run dev        # http://localhost:3000
 | `npm run build` / `npm start` | Build y servidor de producción |
 | `npm test` | Tests (Vitest) |
 | `npm run test:lab` | Solo el laboratorio de escenarios (motor 1.x frente a 2.0) |
+| `npm run test:db` | RLS, permisos y cuota sobre PostgreSQL (no necesita Docker) |
+| `npm run test:accounts` | Flujos de cuenta, cuotas y límites |
+| `npm run supabase:start` / `supabase:stop` | Supabase local (necesita Docker Desktop) |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | Comprobación de tipos |
 

@@ -1,22 +1,9 @@
-import { authenticate, createSession, getSession } from "@/lib/pro/auth";
-import { ProError } from "@/lib/pro/errors";
-import { enforceRateLimit, json, readJson, route, setSessionCookie } from "@/lib/pro/http";
+import { json, readJson, route } from "@/lib/accounts/http";
+import { login } from "@/lib/accounts/service";
 
-export const POST = route(async ({ request, db }) => {
-  await enforceRateLimit(request, "login", 10, 60_000);
+export const POST = route(async ({ request, deps }) => {
+  const user = await login(deps, request.headers, await readJson(request));
 
-  const body = await readJson(request);
-  const userId = await authenticate(db, body.email, body.password);
-
-  if (!userId) {
-    // Mismo mensaje exista o no la cuenta.
-    throw new ProError(401, "Correo o contraseña incorrectos.");
-  }
-
-  // Sesión nueva en cada acceso: nunca se reutiliza un token anterior.
-  const token = await createSession(db, userId);
-  const response = json({ session: await getSession(db, token) });
-
-  setSessionCookie(response, token);
-  return response;
+  // Las cookies de sesión (HttpOnly) las ha fijado ya el cliente de Supabase.
+  return json({ user: { email: user.email } });
 });

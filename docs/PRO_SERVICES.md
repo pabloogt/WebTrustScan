@@ -1,6 +1,6 @@
 # PRO_SERVICES — Servicios externos: opciones, costes y decisiones pendientes
 
-> **PLANIFICACIÓN POSPUESTA (15-11-2026).** Este documento recoge ideas y análisis para una posible evolución comercial. **No describe el estado actual del producto ni autoriza a desarrollarlo.** Las cuentas están implementadas pero desactivadas por defecto; pagos, suscripciones, monitorización, alertas y gestión de clientes no están implementados; no hay ningún servicio externo contratado ni conectado. Estado real: `HANDOFF.md` y `AUTH_STORAGE_AUDIT.md`.
+> **DOCUMENTO DE PLANIFICACIÓN, PARCIALMENTE SUPERADO (16-11-2026).** Recoge análisis previos a la arquitectura actual. Lo que diga sobre autenticación propia, PGlite, Neon, dominios guardados u organizaciones **ya no es cierto**: hoy las cuentas usan Supabase Auth y PostgreSQL con RLS, los planes son Free y Pro, y no hay pagos. Estado real: `HANDOFF.md`, `SECURITY_ACCOUNTS.md`, `PLANS_AND_QUOTAS.md` y `STRIPE_NEXT_PHASE.md`.
 
 **Fecha:** 15 de noviembre de 2026. Las cifras proceden en su mayoría de comparativas de terceros; están enlazadas y **deben confirmarse en la página oficial de cada proveedor**. No se ha contratado, configurado ni dado de alta nada.
 

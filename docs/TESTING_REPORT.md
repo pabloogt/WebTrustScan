@@ -1,88 +1,93 @@
 # TESTING_REPORT — Pruebas y verificación
 
-**Actualizado:** 15 de noviembre de 2026 (revisión técnica) · **Entorno:** Windows 11, Node 24.14.1, OpenSSL 3.2.4 · **Rama:** `engine-2.0-revision`.
+**Actualizado:** 16 de noviembre de 2026 · **Entorno:** Windows 11, Node 24.14.1, OpenSSL 3.2.4 · **Rama:** `engine-2.0-revision` (cambios sin commitear).
 
-Este documento separa tres cosas que no son lo mismo: lo que cubre una **prueba automática**, lo que se ha **comprobado a mano** en esta máquina y lo que **no se ha comprobado**.
+Este documento separa cuatro niveles que no son lo mismo:
 
-## 1. Resultado de la suite automática
+| Nivel | Significado |
+|---|---|
+| **Prueba automática** | La ejecuta `npm test`. Simula el entorno (servidores locales, PostgreSQL embebido, un doble de Supabase Auth). |
+| **Comprobado a mano** | Hecho en este equipo con la aplicación real en marcha. |
+| **Sin verificar** | Implementado, pero no ejecutado contra el servicio real. |
+| **No implementado** | No existe. |
 
-`npx vitest run`: **492 pruebas, 492 pasan, 0 fallan**, en 21 ficheros (~10 s).
+## 1. Suite automática
+
+`npx vitest run`: **539 pruebas, 539 pasan, 0 fallan**, en 23 ficheros.
+
+| Antes de esta fase | Ahora |
+|---|---|
+| 492 pruebas en 21 ficheros | 539 pruebas en 23 ficheros |
+
+Se retiraron las 107 pruebas del sistema de cuentas anterior (autenticación propia sobre PGlite), porque el código que probaban ya no existe, y se añadieron 154 nuevas. Las 385 restantes no se han tocado, salvo las dos excepciones indicadas abajo.
 
 | Fichero | Pruebas | Qué cubre |
 |---|---|---|
-| `analyze`, `checks`, `clientIp`, `csp`, `ipGuard`, `normalizeUrl`, `rateLimit`, `route`, `safeRequest`, `ssrfRebinding` | 222 | Suite histórica de las auditorías 1 y 2, **sin modificar** |
-| `engine/scoring` | 26 | Fórmula, cobertura, topes, confianza |
-| `engine/parsers` | 33 | CSP, cookies, HTML |
-| `engine/transport` | 16 | Regresión de seguridad de la capa de red |
-| `engine/calibration` | 28 | Casos derivados de Amazon y TermLifePicks |
-| `engine/revision` | 28 | Esta revisión: TLS por versión, SPF/DMARC, HSTS, CSP, heurísticas, transparencia |
+| `analyze`, `checks`, `clientIp`, `csp`, `ipGuard`, `normalizeUrl`, `rateLimit`, `route`, `safeRequest`, `ssrfRebinding` | 222 | Suite histórica de las auditorías 1 y 2 |
+| `engine/scoring`, `parsers`, `transport`, `calibration`, `revision` | 131 | Motor: fórmula, parsers, red, calibración y revisión técnica |
 | `lab/lab` | 27 | 31 escenarios, motor 1.x frente a 2.0 |
 | `report/pdf` | 5 | Generación del PDF |
-| `pro/auth` | 22 | Contraseñas, sesiones, cookies, CSRF, límite de intentos |
-| `pro/domains-audits` | 26 | Dominios, verificación, historial, comparación |
-| `pro/isolation` | 15 | Aislamiento entre organizaciones |
-| `pro/disabled` | 44 | Cuentas desactivadas por defecto |
+| `db/smoke`, `db/rls`, `db/quota` | 42 | Migraciones, RLS, permisos y consumo sobre PostgreSQL |
+| `accounts/flows` | 35 | Alta, confirmación, acceso, recuperación, cambios, borrado, exportación, aislamiento |
+| `accounts/analyze` | 20 | Cuotas por la ruta real del analizador |
+| `accounts/limits` | 57 | Límites, HMAC, Upstash, configuración y cuentas desactivadas |
 
-Otras comprobaciones ejecutadas: `tsc --noEmit` sin errores · `eslint` sin errores · `next build` correcto (15 rutas) · `npm audit` 0 vulnerabilidades.
+Otras comprobaciones: `tsc --noEmit` sin errores · `eslint` sin errores · `next build` correcto (18 rutas) · `npm audit` 0 vulnerabilidades.
 
-**Fallos conocidos:** ninguno en esta ejecución. En la fase anterior un test histórico de límite de peticiones («un token incorrecto se trata como fallo del almacén») falló una vez y no se ha vuelto a reproducir en ninguna de las ejecuciones posteriores; no se ha investigado la causa.
+**Pruebas históricas modificadas (2 de 222), y por qué:**
 
-## 2. Pruebas de esta revisión
+- `route.test.ts`, dos casos con `VERCEL=1`: ahora, en un entorno tipo Vercel sin Upstash, el analizador responde 503 en lugar de limitar en memoria. Esos casos prueban la identificación de la IP, así que declaran de forma explícita `RATE_LIMIT_ALLOW_MEMORY=true`. El comportamiento nuevo tiene sus propias pruebas.
+- `csp.test.ts`: `proxy` pasa a ser asíncrono (renueva la sesión); las pruebas lo esperan con `await`. No cambia lo que comprueban.
 
-Todas se ejecutan contra servidores TLS y HTTP reales levantados en `127.0.0.1` por el laboratorio (`tests/lab/harness.ts`), con DNS simulado. Son automáticas y **simulan** los sitios; no sustituyen a las comprobaciones de §3.
+**Fallos conocidos:** ninguno en esta ejecución. Un test histórico de límite de peticiones falló una vez hace dos fases y no se ha vuelto a reproducir; no se ha investigado.
 
-| Requisito | Prueba |
-|---|---|
-| Aceptación y rechazo de cada versión TLS | Servidor moderno (1.0 y 1.1 rechazados con alerta, 1.2 y 1.3 aceptados); servidor que acepta las cuatro; servidor que acepta 1.1 pero no 1.0; servidor sin 1.3 |
-| Versión negociada frente a versiones admitidas | La evidencia incluye la conexión normal y un saludo por versión; el control de versión negociada sigue correcto aunque se acepten versiones antiguas |
-| Un error del cliente no es un rechazo | Puerto cerrado, dominio que no resuelve, servidor que no responde al saludo y servicio que no habla TLS dan «no comprobable»; con una versión antigua sin probar el control queda «no comprobado» |
-| DMARC `p=none` y ausencia de `rua` | El texto no afirma que los mensajes se entreguen; menciona los filtros del receptor y la falta de destino para informes |
-| SPF `~all` frente a `-all` | Se describen como softfail y fail, con textos distintos |
-| HSTS sin `includeSubDomains` automático | La cabecera propuesta no lo lleva; se explica el impacto en subdominios; `preload` no se recomienda |
-| CSP en Report-Only | Recomendación «Report-Only primero», terceros detectados nombrados, aviso de WordPress; se distingue política aplicada de política en pruebas |
-| Puntuación ponderada, cobertura y confianza | Ejemplo «1 de 4 correctos = 9/100»; la puntuación se recalcula a partir de los hallazgos y coincide |
-| Límites del informe de correo | El aviso existe y aparece en interfaz y PDF |
-| Falsos positivos y negativos en cookies y SRI | Identificadores solo numéricos, prioridad de `Max-Age`, marca como palabra completa (`shopify` ≠ `shop`), tercero sin versión visible, 403 genérico |
-| Cuentas desactivadas | Las 13 rutas responden 404 con y sin sesión, no consultan la base de datos, no crean cuentas; el analizador público responde |
+## 2. Qué simulan las pruebas nuevas (y qué no)
 
-## 3. Comprobaciones manuales realizadas en esta máquina
-
-| Comprobación | Cómo | Resultado |
+| Área | Cómo se prueba | Qué NO prueba |
 |---|---|---|
-| Versiones TLS de `www.amazon.es` con una herramienta independiente | `openssl s_client` con `-tls1`, `-tls1_1`, `-tls1_2`, `-tls1_3` y sin opción | Acepta las cuatro; una conexión normal negocia TLS 1.3. Coincide con el motor. |
-| Análisis real de `www.amazon.es` y `termlifepicks.com` | Una ejecución del motor por sitio tras las correcciones | 82 (B) y 61 (C). Informes guardados en `docs/informes/`. |
-| PDF de ambos sitios | Generados a partir de esos informes; las 5 páginas de cada uno revisadas como imagen y por su texto extraído | Sin caracteres rotos; URL y evidencias completas; saltos de página corregidos (ver abajo). |
-| PDF bajo la CSP de producción | `next build` + `next start`; informe mostrado en el navegador; pulsado «Descargar PDF» | Archivo válido de 14 640 bytes (`%PDF-1.7` … `%%EOF`), tipo `application/pdf`, **0 infracciones de CSP**. |
-| Cuentas desactivadas en el servidor real | Mismo servidor, sin ninguna variable de entorno | `/acceso` y `/panel` → 404; registro, acceso, sesión, dominios y comparación → 404; la portada no enlaza al panel. |
+| Base de datos, RLS, cuota | Las migraciones reales de `supabase/migrations/` aplicadas a PostgreSQL embebido (PGlite), con los roles `anon`, `authenticated` y `service_role` y el JWT como los fija Supabase | La API de Supabase; la concurrencia entre varias conexiones |
+| Flujos de cuenta | Las rutas reales de la aplicación; datos y cuota contra ese PostgreSQL; **la autenticación es un doble** que imita el comportamiento documentado de Supabase Auth | Supabase Auth: envío de correos, formato real de los enlaces, cookies, códigos de error reales |
+| Cuotas del analizador | La ruta real `/api/analyze`; el motor se sustituye por un doble para no salir a la red | — |
+| Upstash | El cliente oficial con `fetch` simulado (respuesta correcta y caída) | Una base Redis real |
 
-Defectos encontrados al revisar los PDF y corregidos: una viñeta partida entre dos páginas a mitad de frase, una evidencia separada de su etiqueta, una entrada de la lista de controles partida, dos títulos de sección aislados al pie de página y los controles informativos sin sus URL de evidencia. Tras la última corrección (títulos aislados) la comprobación se hizo sobre el texto de cada página, no de nuevo como imagen.
+Las 42 pruebas de base de datos son la parte más sólida: ejecutan el SQL que se desplegará. Las de flujos demuestran que **nuestra** lógica es correcta (respuestas que no revelan cuentas, límites, redirecciones, aislamiento), no que la integración con Supabase funcione.
 
-Matices:
-
-- En la prueba del PDF bajo CSP, la respuesta de `/api/analyze` se sustituyó por el informe guardado de TermLifePicks para no repetir el análisis, y **se impidió el guardado del fichero en disco**: se verificó el contenido generado, no el diálogo de descarga del navegador.
-- No se me adjuntaron los dos PDF de referencia que mencionas; la comparación se hizo contra los generados en la fase anterior.
-
-## 4. No comprobado
-
-| Qué | Por qué |
-|---|---|
-| Comportamiento en Vercel (DNS, sondas TLS, duración, cabeceras de IP) | Sin despliegue. Las sondas TLS han pasado de una a cuatro por análisis; se lanzan en paralelo, pero su efecto en la duración real no está medido. |
-| Sondas de TLS 1.0/1.1 en el runtime de Vercel | Si su OpenSSL no las permite, el control quedará «no comprobado» (previsto en código, no verificado allí). |
-| Cuentas sobre PostgreSQL real | Solo se han ejecutado sobre PGlite. |
-| Cookie de sesión `__Host-` y `Secure` en un dominio HTTPS | Requiere un despliegue. |
-| Guardado real del PDF en disco desde el navegador y aspecto en distintos visores | No ejecutado. |
-| Más sitios reales | Solo dos. Las heurísticas necesitan una muestra mayor de dominios autorizados. |
-| Bloqueos reales de CDN/WAF | Las marcas de bloqueo proceden de documentación, no de capturas. |
-
-## 5. Regresión
+## 3. Comprobado a mano en este equipo
 
 | Comprobación | Resultado |
 |---|---|
-| El analizador público sigue funcionando | Suite histórica intacta (222/222); ruta `/api/analyze` probada con las cuentas desactivadas; análisis reales completados |
-| Las puntuaciones no cambian sin motivo | Los 31 escenarios del laboratorio dan **exactamente** las mismas notas que antes de la revisión. Único cambio real: Amazon 85 → 82, justificado en `SCORING_MODEL.md` §6 |
-| Los PDF siguen generándose | 5 tests + generación real de dos informes |
-| Las protecciones SSRF siguen activas en las vías nuevas | Las cuatro sondas TLS usan la misma validación de destino; tests de IP internas, puerto y *rebinding* |
-| Presupuesto de peticiones | Máximo 5 peticiones HTTP por análisis (test). Saludos TLS: 4 (antes 1), sin datos de aplicación |
+| Servidor de producción local (`next build` + `next start`) sin ninguna variable | `/acceso`, `/panel`, `/cuenta/nueva-contrasena` y las rutas de cuentas → **404**. La portada no enlaza a la cuenta. |
+| Mismo servidor, analizador sin Upstash | **503** «El servicio no está disponible en este momento» (antes: funcionaba con límites por instancia). |
+| PDF de Amazon.es y TermLifePicks | Regenerados desde los informes guardados. **Contenido:** puntuaciones, cobertura, número de controles y títulos de hallazgos coinciden con el JSON. **Diseño:** las 10 páginas revisadas como imagen tras la última corrección; sin títulos huérfanos, etiquetas de evidencia junto a su valor, tablas, viñetas y caracteres correctos. |
+| Generación del PDF bajo la CSP de producción | Sin errores ni infracciones de CSP. |
+| **Descarga real del PDF desde el navegador** | **No verificada por mí.** Pulsé «Descargar PDF» en el navegador integrado de la herramienta y no apareció ningún fichero nuevo en disco (ese navegador no parece guardar descargas). En la carpeta de Descargas hay dos PDF descargados antes por el propietario del proyecto; el más reciente es un PDF válido de 5 páginas. Falta una comprobación explícita en Chrome, Firefox y Safari. |
+| Los informes no muestran datos de otro usuario | Prueba automática: con el identificador de un informe ajeno, 404. No comprobado a mano con dos cuentas reales. |
+| Versiones TLS de `www.amazon.es` con OpenSSL | Fase anterior: acepta 1.0, 1.1, 1.2 y 1.3; coincide con el motor. |
+| Duración de un análisis | 0,9 s (Amazon) y 1,2 s (TermLifePicks) desde este equipo. No medido en Vercel. `maxDuration` sigue en 30 s, sin cambios. |
+
+## 4. Sin verificar
+
+| Qué | Por qué |
+|---|---|
+| **Todo Supabase** (Auth, API, cookies, correos, migraciones con la CLI) | Docker Desktop no está instalado en este equipo: no se pudo arrancar Supabase local. No hay proyecto en la nube. |
+| Tipos generados por Supabase | Requieren la base en marcha. Los actuales están escritos a mano. |
+| Upstash real | Sin base ni credenciales. |
+| Resend | Sin cuenta ni dominio verificado. |
+| Vercel: variables, región, duración, cabeceras de IP, cookies en HTTPS | Sin despliegue. |
+| Interfaz de cuentas en el navegador (acceso, panel, configuración, plan) | Compila y pasa lint y tipos, pero **no se ha abierto con datos reales**: necesita Supabase en marcha. |
+| Concurrencia real de la cuota | PostgreSQL embebido usa una sola conexión. |
+
+## 5. Regresión del analizador
+
+| Comprobación | Resultado |
+|---|---|
+| Suite histórica | 222 / 222 (con las dos adaptaciones descritas) |
+| Laboratorio | 27 / 27; las notas de los 31 escenarios no han cambiado |
+| Protecciones SSRF, *rebinding*, tamaños y tiempos | Sin cambios en `lib/audit/`; sus pruebas pasan |
+| Los planes no alteran el motor | El motor recibe solo la URL validada; un usuario Pro obtiene los mismos rechazos por destino interno |
+| Puntuaciones | Ningún peso ni criterio modificado en esta fase |
+
+**Cambio de comportamiento a tener presente antes de desplegar:** el analizador público pasa a tener un límite de 2 análisis al día por IP sin cuenta, y en producción **deja de funcionar si no están configurados Upstash e `IP_HASH_SECRET`**.
 
 ## 6. Laboratorio: motor 1.x frente a Engine 2.0
 
@@ -131,5 +136,7 @@ npm run typecheck
 npm run lint
 npm run build
 ```
+
+Solo la base de datos: `npm run test:db`. Solo cuentas: `npm run test:accounts`.
 
 Tabla del laboratorio (Git Bash): `LAB_REPORT=1 npx vitest run tests/lab`.

@@ -1,12 +1,10 @@
-import { destroySession } from "@/lib/pro/auth";
-import { clearSessionCookie, json, readSessionToken, route } from "@/lib/pro/http";
+import { json, readJson, route } from "@/lib/accounts/http";
 
-export const POST = route(async ({ request, db }) => {
-  const token = readSessionToken(request);
+export const POST = route(async ({ request, deps }) => {
+  const body = await readJson(request).catch(() => ({}) as Record<string, unknown>);
 
-  if (token) await destroySession(db, token);
+  // "global" revoca todas las sesiones de la cuenta, no solo esta.
+  await deps.auth.signOut(body.scope === "all" ? "global" : "local");
 
-  const response = json({ ok: true });
-  clearSessionCookie(response);
-  return response;
+  return json({ ok: true });
 });

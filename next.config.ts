@@ -20,8 +20,6 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  // Paquetes de base de datos: se cargan desde node_modules, sin empaquetar.
-  serverExternalPackages: ["@electric-sql/pglite", "pg"],
   async headers() {
     return [
       { source: "/(.*)", headers: securityHeaders },

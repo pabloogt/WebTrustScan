@@ -3,6 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type Post = (request: NextRequest) => Promise<Response>;
 
+/**
+ * En un entorno tipo Vercel, sin Upstash el analizador ya no funciona con
+ * límites en memoria: responde 503 (ver «control de abuso no disponible»).
+ * Estas pruebas históricas verifican la identificación de la IP y los
+ * límites por minuto, así que declaran de forma explícita la excepción.
+ */
+const VERCEL = {
+  VERCEL: "1",
+  RATE_LIMIT_ALLOW_MEMORY: "true",
+  IP_HASH_SECRET: "clave-de-pruebas-de-al-menos-32-caracteres",
+};
+
 /** Carga el handler con un entorno concreto (el limitador se crea al importar). */
 async function loadRoute(env: Record<string, string>): Promise<Post> {
   vi.resetModules();
@@ -89,7 +101,7 @@ describe("POST /api/analyze · límite de peticiones", () => {
   });
 
   it("en Vercel limita por la IP de la plataforma e ignora la falseada", async () => {
-    const post = await loadRoute({ VERCEL: "1" });
+    const post = await loadRoute(VERCEL);
 
     const attacker = await statuses(post, 12, (i) => ({
       "x-forwarded-for": `198.51.100.${i}`,
@@ -116,7 +128,7 @@ describe("POST /api/analyze · límite de peticiones", () => {
 
   it("devuelve Retry-After y un mensaje distinto para el límite global", async () => {
     const post = await loadRoute({
-      VERCEL: "1",
+      ...VERCEL,
       RATE_LIMIT_GLOBAL_PER_MINUTE: "3",
     });
 

@@ -1,5 +1,5 @@
 import HomePage from "@/components/HomePage";
-import { accountsEnabled } from "@/lib/pro/config";
+import { accountsEnabled } from "@/lib/accounts/config";
 
 export default function Page() {
   // El enlace al panel solo existe si las cuentas están activadas en servidor.
