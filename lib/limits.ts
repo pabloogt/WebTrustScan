@@ -45,8 +45,38 @@ export type LimitsMode = "upstash" | "memory" | "unavailable";
 const isProductionLike = (env: Env) =>
   env.NODE_ENV === "production" || env.VERCEL === "1";
 
+/**
+ * Credenciales de Upstash. Acepta los nombres de Upstash (`UPSTASH_REDIS_*`)
+ * y los que crea la integración de Upstash del Marketplace de Vercel
+ * (`KV_REST_API_*`), igual que el limitador del analizador.
+ */
+export function upstashCredentials(env: Env = process.env): { url: string; token: string } | null {
+  const url = env.UPSTASH_REDIS_REST_URL || env.KV_REST_API_URL;
+  const token = env.UPSTASH_REDIS_REST_TOKEN || env.KV_REST_API_TOKEN;
+
+  return url && token && /^https:\/\//i.test(url) ? { url, token } : null;
+}
+
+/**
+ * Qué falta para tener control de abuso en producción. Solo nombres de
+ * variables, nunca sus valores: va al log del servidor para diagnosticar.
+ */
+export function missingLimitsConfig(env: Env = process.env): string[] {
+  const missing: string[] = [];
+
+  if (!upstashCredentials(env) && env.RATE_LIMIT_ALLOW_MEMORY !== "true") {
+    missing.push(
+      "UPSTASH_REDIS_REST_URL y UPSTASH_REDIS_REST_TOKEN (o KV_REST_API_URL y KV_REST_API_TOKEN); la URL debe empezar por https://",
+    );
+  }
+  if (!env.IP_HASH_SECRET || env.IP_HASH_SECRET.length < 32) {
+    missing.push("IP_HASH_SECRET (mínimo 32 caracteres)");
+  }
+  return missing;
+}
+
 export function limitsMode(env: Env = process.env): LimitsMode {
-  if (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN) return "upstash";
+  if (upstashCredentials(env)) return "upstash";
   if (isProductionLike(env) && env.RATE_LIMIT_ALLOW_MEMORY !== "true") {
     return "unavailable";
   }
@@ -126,9 +156,10 @@ const limiters = new Map<string, Ratelimit>();
 let lastWarning = 0;
 
 function getRedis(env: Env): Redis {
+  const credentials = upstashCredentials(env) as { url: string; token: string };
   redis ??= new Redis({
-    url: env.UPSTASH_REDIS_REST_URL as string,
-    token: env.UPSTASH_REDIS_REST_TOKEN as string,
+    url: credentials.url,
+    token: credentials.token,
     // Si Redis no responde se degrada enseguida a memoria local, en lugar de
     // retener la petición varios segundos con reintentos.
     retry: { retries: 1, backoff: () => 100 },
@@ -163,7 +194,7 @@ export async function checkLimit(
 
   if (mode === "unavailable") {
     throw new LimitsUnavailableError(
-      "El control de abuso no está configurado (faltan las variables de Upstash).",
+      `El control de abuso no está configurado. Falta: ${missingLimitsConfig(env).join("; ")}.`,
     );
   }
 
@@ -228,7 +259,9 @@ export async function acquireSlot(
   const mode = limitsMode(env);
 
   if (mode === "unavailable") {
-    throw new LimitsUnavailableError("El control de abuso no está configurado.");
+    throw new LimitsUnavailableError(
+      `El control de abuso no está configurado. Falta: ${missingLimitsConfig(env).join("; ")}.`,
+    );
   }
 
   if (mode === "upstash") {

@@ -12,7 +12,7 @@ Plantilla sin valores: [`.env.example`](../.env.example). `.env.local` y cualqui
 | `NEXT_PUBLIC_SUPABASE_URL` | No | Sí con cuentas activadas | URL del proyecto de Supabase. |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | No (pública) | Sí con cuentas activadas | Clave pública de Supabase. Solo permite lo que autoricen RLS y los permisos. Se acepta también `NEXT_PUBLIC_SUPABASE_ANON_KEY` (nombre antiguo). |
 | `SUPABASE_SECRET_KEY` | **Sí** | Sí con cuentas activadas | Clave secreta de Supabase: **se salta RLS**. Solo la usa el servidor para la cuota, el registro de eventos y el borrado de cuenta. Se acepta también `SUPABASE_SERVICE_ROLE_KEY`. |
-| `UPSTASH_REDIS_REST_URL` | No | Sí en Preview y producción | Dirección REST de la base Redis de Upstash. |
+| `UPSTASH_REDIS_REST_URL` | No | Sí en Preview y producción | Dirección REST de la base Redis de Upstash.  Si Upstash se conectó desde el Marketplace de Vercel, vale también `KV_REST_API_URL` (y `KV_REST_API_TOKEN` para el token). Debe empezar por `https://`. |
 | `UPSTASH_REDIS_REST_TOKEN` | **Sí** | Sí en Preview y producción | Token de esa base. |
 | `RATE_LIMIT_ALLOW_MEMORY` | No | No | `true` permite límites en memoria por instancia en producción si no hay Upstash. No recomendado: en serverless cada instancia cuenta por separado. |
 | `TRUSTED_PROXY_HOPS` | No | Solo fuera de Vercel | Número de proxies de confianza delante de la aplicación, para identificar la IP del cliente. En Vercel no hace falta. |

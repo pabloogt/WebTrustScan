@@ -22,6 +22,7 @@ import {
   clientKey,
   enforceLimit,
   limitsMode,
+  missingLimitsConfig,
   pseudonym,
   resetLimitsForTests,
 } from "@/lib/limits";
@@ -78,10 +79,34 @@ describe("modo de los límites", () => {
     [{ VERCEL: "1" }, "unavailable"],
     [{ NODE_ENV: "production", UPSTASH_REDIS_REST_URL: "https://x" }, "unavailable"], // falta el token
     [{ NODE_ENV: "production", ...UPSTASH }, "upstash"],
+    // Nombres que crea la integración de Upstash del Marketplace de Vercel.
+    [{ VERCEL: "1", KV_REST_API_URL: "https://x.upstash.io", KV_REST_API_TOKEN: "t" }, "upstash"],
+    [{ VERCEL: "1", KV_REST_API_URL: "https://x.upstash.io" }, "unavailable"],
+    // Una URL que no es https no se acepta (p. ej. la redis:// de KV_URL).
+    [{ VERCEL: "1", UPSTASH_REDIS_REST_URL: "redis://x", UPSTASH_REDIS_REST_TOKEN: "t" }, "unavailable"],
     [{ NODE_ENV: "production", RATE_LIMIT_ALLOW_MEMORY: "true" }, "memory"],
     [{ NODE_ENV: "production", RATE_LIMIT_ALLOW_MEMORY: "1" }, "unavailable"],
   ])("%j → %s", (env, expected) => {
     expect(limitsMode(env)).toBe(expected);
+  });
+
+  it("el log dice qué variable falta, sin mostrar ningún valor", () => {
+    expect(missingLimitsConfig({ VERCEL: "1" })).toEqual([
+      expect.stringContaining("KV_REST_API_URL"),
+      expect.stringContaining("IP_HASH_SECRET"),
+    ]);
+    expect(
+      missingLimitsConfig({
+        VERCEL: "1",
+        KV_REST_API_URL: "https://x.upstash.io",
+        KV_REST_API_TOKEN: "token-secreto",
+        IP_HASH_SECRET: "corta-y-secreta",
+      }),
+    ).toEqual(["IP_HASH_SECRET (mínimo 32 caracteres)"]);
+    expect(JSON.stringify(missingLimitsConfig({ VERCEL: "1", IP_HASH_SECRET: "corta-y-secreta" }))).not.toContain(
+      "corta-y-secreta",
+    );
+    expect(missingLimitsConfig({ ...UPSTASH, IP_HASH_SECRET: "x".repeat(32) })).toEqual([]);
   });
 
   it("en producción sin Upstash no se limita en memoria: se rechaza", async () => {
