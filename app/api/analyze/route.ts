@@ -7,7 +7,7 @@ import type { AccountDeps, SessionUser } from "@/lib/accounts/ports";
 import { createAnalyzeRateLimit } from "@/lib/analyzeRateLimit";
 import { getClientIdentity } from "@/lib/clientIp";
 import { runAudit } from "@/lib/engine/run";
-import { LimitsUnavailableError, limitsMode } from "@/lib/limits";
+import { LimitsUnavailableError, limitsMode, missingLimitsConfig } from "@/lib/limits";
 import { randomUUID } from "node:crypto";
 
 // El análisis tiene su propio tope de 20 s; se deja margen a la plataforma.
@@ -80,7 +80,9 @@ export async function POST(request: NextRequest) {
   try {
     // Sin control de abuso configurado no se analiza: nunca sin límites.
     if (limitsMode() === "unavailable") {
-      throw new LimitsUnavailableError("Faltan las variables de Upstash en producción.");
+      throw new LimitsUnavailableError(
+        `Falta: ${missingLimitsConfig().join("; ")}.`,
+      );
     }
 
     const limit = await rateLimit.check(getClientIdentity(request.headers).key);
