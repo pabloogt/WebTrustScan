@@ -1,8 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import { quotaRpc } from "./quotaRpc";
 import type { AuditReport } from "../engine/types";
-import { ACCOUNT_MAX_CONCURRENT_AUDITS, auditLimitsByPlan, type Plan } from "../plans";
+import type { Plan } from "../plans";
 import type { SupabaseConfig } from "./config";
 import type {
   AccountDeps,
@@ -91,7 +92,7 @@ function failure(error: { code?: string; status?: number } | null): AuthResult {
     reason = "invalid_link";
   }
 
-  return { ok: false, reason };
+  return { ok: false, reason, code: code || `http_${error.status ?? "?"}` };
 }
 
 function toSessionUser(user: User | null): SessionUser | null {
@@ -128,6 +129,10 @@ function authPort(config: SupabaseConfig, session: SupabaseClient): AuthPort {
     },
     async verifyLink(type, tokenHash) {
       const { error } = await session.auth.verifyOtp({ type, token_hash: tokenHash });
+      return failure(error);
+    },
+    async exchangeCode(code) {
+      const { error } = await session.auth.exchangeCodeForSession(code);
       return failure(error);
     },
     async verifyPassword(email, password) {
@@ -248,10 +253,15 @@ type RpcReservation = {
   plan?: Plan;
   used?: number;
   limit?: number;
-  period_end?: string;
+  next_release_at?: string | null;
+  available_at?: string | null;
   status?: string;
   audit_id?: string | null;
 };
+
+/** Fecha de PostgreSQL (con cualquier desfase) → ISO 8601 en UTC. */
+const isoOrNull = (value: string | null | undefined) =>
+  value ? new Date(value).toISOString() : null;
 
 export function toReservation(raw: RpcReservation): Reservation {
   switch (raw.outcome) {
@@ -262,7 +272,7 @@ export function toReservation(raw: RpcReservation): Reservation {
         plan: raw.plan as Plan,
         used: raw.used as number,
         limit: raw.limit as number,
-        periodEnd: raw.period_end as string,
+        nextReleaseAt: isoOrNull(raw.next_release_at),
       };
     case "duplicate":
       return {
@@ -277,7 +287,7 @@ export function toReservation(raw: RpcReservation): Reservation {
         plan: raw.plan as Plan,
         used: raw.used as number,
         limit: raw.limit as number,
-        periodEnd: raw.period_end as string,
+        availableAt: isoOrNull(raw.available_at),
       };
     case "too_many_concurrent":
       return { outcome: "too_many_concurrent" };
@@ -290,15 +300,17 @@ export function toUsage(raw: {
   outcome: string;
   plan?: Plan;
   used?: number;
-  period_start?: string;
-  period_end?: string;
+  limit?: number;
+  next_release_at?: string | null;
+  available_at?: string | null;
 }): Usage | null {
   return raw.outcome === "ok"
     ? {
         plan: raw.plan as Plan,
         used: raw.used as number,
-        periodStart: new Date(raw.period_start as string).toISOString(),
-        periodEnd: new Date(raw.period_end as string).toISOString(),
+        limit: raw.limit as number,
+        nextReleaseAt: isoOrNull(raw.next_release_at),
+        availableAt: isoOrNull(raw.available_at),
       }
     : null;
 }
@@ -310,35 +322,20 @@ function quotaPort(config: SupabaseConfig): QuotaPort {
 
   return {
     async usage(userId, emailHash) {
-      return toUsage(
-        unwrap(await service().rpc("workspace_usage", { p_user: userId, p_email_hash: emailHash })),
-      );
+      const { fn, args } = quotaRpc.usage(userId, emailHash);
+      return toUsage(unwrap(await service().rpc(fn, args)));
     },
     async reserve(userId, requestId, emailHash) {
-      return toReservation(
-        unwrap(
-          await service().rpc("reserve_audit", {
-            p_user: userId,
-            p_request: requestId,
-            p_limits: auditLimitsByPlan(),
-            p_max_concurrent: ACCOUNT_MAX_CONCURRENT_AUDITS,
-            p_email_hash: emailHash,
-          }),
-        ),
-      );
+      const { fn, args } = quotaRpc.reserve(userId, requestId, emailHash);
+      return toReservation(unwrap(await service().rpc(fn, args)));
     },
     async complete(usageId, hostname, report, historySize) {
-      return unwrap(
-        await service().rpc("complete_audit", {
-          p_usage: usageId,
-          p_hostname: hostname,
-          p_report: report,
-          p_history_limit: historySize,
-        }),
-      ) as string;
+      const { fn, args } = quotaRpc.complete(usageId, hostname, report, historySize);
+      return unwrap(await service().rpc(fn, args)) as string;
     },
     async finish(usageId, status) {
-      unwrap(await service().rpc("finish_audit", { p_usage: usageId, p_status: status }));
+      const { fn, args } = quotaRpc.finish(usageId, status);
+      unwrap(await service().rpc(fn, args));
     },
     async reportOf(auditId) {
       const row = unwrap(
@@ -347,9 +344,8 @@ function quotaPort(config: SupabaseConfig): QuotaPort {
       return row?.report ?? null;
     },
     async recordDeletion(userId, emailHash) {
-      unwrap(
-        await service().rpc("record_account_deletion", { p_user: userId, p_email_hash: emailHash }),
-      );
+      const { fn, args } = quotaRpc.recordDeletion(userId, emailHash);
+      unwrap(await service().rpc(fn, args));
     },
     async logSecurityEvent(event) {
       // El registro es auxiliar: un fallo al escribirlo no rompe la operación.

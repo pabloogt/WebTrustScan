@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { PASSWORD_MIN_LENGTH } from "@/lib/plans";
-import { api, card, field, messageOf, primaryButton } from "./api";
+import { ApiError, api, card, field, messageOf, primaryButton } from "./api";
 
 /** Contraseña nueva tras abrir un enlace de recuperación. */
 export default function NewPasswordForm() {
@@ -12,6 +13,7 @@ export default function NewPasswordForm() {
   const [repeat, setRepeat] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [expired, setExpired] = useState(false);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -25,11 +27,14 @@ export default function NewPasswordForm() {
     setBusy(true);
 
     try {
-      await api("/api/account/password", { method: "POST", body: { password } });
+      // `recovery` indica que venimos del enlace: si el pase ha caducado, el
+      // servidor lo dice así en lugar de pedir la contraseña anterior.
+      await api("/api/account/password", { method: "POST", body: { password, recovery: true } });
       router.push("/panel");
       router.refresh();
     } catch (cause) {
       setError(messageOf(cause));
+      setExpired(cause instanceof ApiError && cause.data.code === "recovery_expired");
       setBusy(false);
     }
   };
@@ -73,6 +78,11 @@ export default function NewPasswordForm() {
         >
           {error}
         </p>
+      )}
+      {expired && (
+        <Link href="/acceso?modo=recuperar" className="block text-sm text-slate-300 underline hover:text-white">
+          Solicitar otro enlace de recuperación
+        </Link>
       )}
 
       <button type="submit" disabled={busy} className={`${primaryButton} w-full`}>

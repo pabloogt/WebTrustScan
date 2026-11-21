@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import ReportView from "@/components/report/ReportView";
 import UrlForm from "@/components/UrlForm";
+import { usageSummary } from "@/components/account/quotaText";
 import {
   CATALOG,
   CATEGORY_LABELS,
@@ -61,7 +62,12 @@ export default function HomePage({
   const [result, setResult] = useState<AuditReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [quota, setQuota] = useState<{ remaining: number; limit: number } | null>(null);
+  const [quota, setQuota] = useState<{
+    used: number;
+    remaining: number;
+    limit: number;
+    windowDays: number;
+  } | null>(null);
   const reportRef = useRef<HTMLElement>(null);
 
   // Al terminar un análisis se lleva al usuario al informe.
@@ -175,8 +181,9 @@ export default function HomePage({
 
           {quota && (
             <p role="status" className="mx-auto mt-4 max-w-4xl text-center text-sm text-slate-400">
-              Análisis guardado en tu historial. Te quedan {quota.remaining} de{" "}
-              {quota.limit} en este periodo.
+              Análisis guardado en tu historial.{" "}
+              {usageSummary(quota.used, quota.limit, quota.windowDays)}; te{" "}
+              {quota.remaining === 1 ? "queda" : "quedan"} {quota.remaining}.
             </p>
           )}
 

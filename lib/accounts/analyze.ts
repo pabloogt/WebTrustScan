@@ -5,7 +5,7 @@ import { assertAllowedTarget } from "../audit/safeRequest";
 import type { AuditReport } from "../engine/types";
 import { acquireSlot, checkLimit, clientKey, enforceLimit, pseudonym } from "../limits";
 import { normalizeUrl } from "../normalizeUrl";
-import { ANONYMOUS, RATE_LIMITS, entitlementsFor } from "../plans";
+import { ANONYMOUS, QUOTA_WINDOW_DAYS, RATE_LIMITS, entitlementsFor } from "../plans";
 import { AccountError } from "./http";
 import type { AccountDeps, SessionUser } from "./ports";
 
@@ -39,9 +39,21 @@ export type QuotaInfo = {
   used: number;
   limit: number;
   remaining: number;
-  periodEnd: string;
+  /** Días de la ventana móvil. */
+  windowDays: number;
+  /** Cuándo se libera el uso más antiguo que cuenta (ISO 8601, UTC). */
+  nextReleaseAt: string | null;
   auditId: string | null;
 };
+
+/** Fecha y hora en UTC para mensajes del servidor: «24/11/2026 18:05 UTC». */
+export function formatUtc(iso: string): string {
+  const date = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(date.getUTCDate())}/${pad(date.getUTCMonth() + 1)}/${date.getUTCFullYear()} ${pad(
+    date.getUTCHours(),
+  )}:${pad(date.getUTCMinutes())} UTC`;
+}
 
 /** Visitante sin cuenta: límite diario por IP y un análisis a la vez. */
 export async function analyzeForVisitor(
@@ -96,12 +108,16 @@ export async function analyzeForUser(
     case "quota_exceeded":
       throw new AccountError(
         429,
-        `Has usado los ${reservation.limit} análisis de tu plan en este periodo.`,
+        `Has usado los ${reservation.limit} análisis de tu plan en los últimos ${QUOTA_WINDOW_DAYS} días.` +
+          (reservation.availableAt
+            ? ` Tendrás uno disponible de nuevo el ${formatUtc(reservation.availableAt)}.`
+            : ""),
         {
           code: "quota_exceeded",
           used: reservation.used,
           limit: reservation.limit,
-          periodEnd: reservation.periodEnd,
+          windowDays: QUOTA_WINDOW_DAYS,
+          availableAt: reservation.availableAt,
         },
       );
     case "too_many_concurrent":
@@ -161,7 +177,8 @@ export async function analyzeForUser(
       used: reservation.used,
       limit: reservation.limit,
       remaining: Math.max(0, reservation.limit - reservation.used),
-      periodEnd: reservation.periodEnd,
+      windowDays: QUOTA_WINDOW_DAYS,
+      nextReleaseAt: reservation.nextReleaseAt,
       auditId,
     },
   };

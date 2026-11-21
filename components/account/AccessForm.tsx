@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { PASSWORD_MIN_LENGTH } from "@/lib/plans";
 import { api, field, messageOf, primaryButton } from "./api";
 
@@ -20,9 +20,49 @@ const LABEL: Record<Mode, string> = {
   recover: "Enviar enlace",
 };
 
-export default function AccessForm({ notice }: { notice?: string }) {
+/** Guarda en esta pestaña cuándo se puede volver a pedir un correo. */
+const COOLDOWN_KEY = "wts-recovery-wait-until";
+
+function storedCooldown(): number {
+  try {
+    return Number(window.sessionStorage.getItem(COOLDOWN_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+export default function AccessForm({
+  notice,
+  initialMode = "login",
+}: {
+  notice?: string;
+  initialMode?: Mode;
+}) {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>("login");
+  const [mode, setMode] = useState<Mode>(initialMode);
+  // Momento (ms) a partir del cual se puede pedir otro correo de recuperación.
+  const [waitUntil, setWaitUntil] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
+  const secondsLeft = Math.max(0, Math.ceil((waitUntil - now) / 1000));
+
+  useEffect(() => {
+    // Recupera la espera si se recarga la página. Se lee al montar porque
+    // sessionStorage no existe en el servidor.
+    const stored = storedCooldown();
+    const timer = window.setTimeout(() => {
+      if (stored > Date.now()) setWaitUntil(stored);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (waitUntil <= Date.now()) return;
+    const timer = window.setInterval(() => {
+      setNow(Date.now());
+      if (Date.now() >= waitUntil) window.clearInterval(timer);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [waitUntil]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -43,12 +83,27 @@ export default function AccessForm({ notice }: { notice?: string }) {
         return;
       }
 
-      const { message } = await api<{ message: string }>(
-        mode === "register" ? "/api/auth/register" : "/api/auth/recover",
-        { method: "POST", body: mode === "register" ? { email, password } : { email } },
-      );
+      const { message, retryAfterSeconds } = await api<{
+        message: string;
+        retryAfterSeconds?: number;
+      }>(mode === "register" ? "/api/auth/register" : "/api/auth/recover", {
+        method: "POST",
+        body: mode === "register" ? { email, password } : { email },
+      });
       setInfo(message);
       setPassword("");
+
+      if (mode === "recover") {
+        // La misma espera que aplica el servidor (y Supabase) por cuenta.
+        const until = Date.now() + (retryAfterSeconds ?? 60) * 1000;
+        setNow(Date.now());
+        setWaitUntil(until);
+        try {
+          window.sessionStorage.setItem(COOLDOWN_KEY, String(until));
+        } catch {
+          // Sin almacenamiento la espera solo dura mientras la página esté abierta.
+        }
+      }
     } catch (cause) {
       setError(messageOf(cause, "No se pudo completar la operación."));
     }
@@ -150,9 +205,22 @@ export default function AccessForm({ notice }: { notice?: string }) {
           </p>
         )}
 
-        <button type="submit" disabled={busy} className={`${primaryButton} w-full`}>
-          {busy ? "Un momento…" : LABEL[mode]}
+        <button
+          type="submit"
+          disabled={busy || (mode === "recover" && secondsLeft > 0)}
+          className={`${primaryButton} w-full`}
+        >
+          {busy
+            ? "Un momento…"
+            : mode === "recover" && secondsLeft > 0
+              ? `Podrás pedir otro enlace en ${secondsLeft} s`
+              : LABEL[mode]}
         </button>
+        {mode === "recover" && secondsLeft > 0 && (
+          <p className="text-xs text-slate-500" aria-live="polite">
+            Si pides varios enlaces, solo funciona el último que recibas.
+          </p>
+        )}
       </form>
 
       <p className="mt-4 text-center text-sm">

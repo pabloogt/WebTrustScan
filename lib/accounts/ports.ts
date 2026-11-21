@@ -25,7 +25,10 @@ export type AuthFailure =
   | "reauth_required"
   | "unavailable";
 
-export type AuthResult = { ok: true } | { ok: false; reason: AuthFailure };
+export type AuthResult =
+  | { ok: true }
+  /** `code` es el código de error original del proveedor, solo para el log. */
+  | { ok: false; reason: AuthFailure; code?: string };
 
 export type OtpType = "email" | "signup" | "recovery" | "email_change";
 
@@ -39,6 +42,12 @@ export interface AuthPort {
   requestPasswordReset(email: string, redirectTo: string): Promise<AuthResult>;
   /** Canjea el enlace de un correo (confirmación, recuperación, cambio). */
   verifyLink(type: OtpType, tokenHash: string): Promise<AuthResult>;
+  /**
+   * Canjea un código PKCE (`?code=`), que es lo que devuelve Supabase cuando
+   * el correo usa su enlace predeterminado. Solo funciona en el navegador
+   * que inició la solicitud.
+   */
+  exchangeCode(code: string): Promise<AuthResult>;
   /** Comprueba una contraseña sin alterar la sesión actual. */
   verifyPassword(email: string, password: string): Promise<boolean>;
   updatePassword(password: string): Promise<AuthResult>;
@@ -72,17 +81,36 @@ export interface DataPort {
   exportAll(userId: string): Promise<Record<string, unknown>>;
 }
 
+/**
+ * Consumo en la ventana móvil. Las fechas son instantes ISO 8601 en UTC.
+ *   nextReleaseAt → cuándo se libera el uso más antiguo que cuenta.
+ *   availableAt   → si no queda ninguno, cuándo vuelve a haber uno libre.
+ */
 export type Usage = {
   plan: Plan;
   used: number;
-  periodStart: string;
-  periodEnd: string;
+  limit: number;
+  nextReleaseAt: string | null;
+  availableAt: string | null;
 };
 
 export type Reservation =
-  | { outcome: "reserved"; usageId: string; plan: Plan; used: number; limit: number; periodEnd: string }
+  | {
+      outcome: "reserved";
+      usageId: string;
+      plan: Plan;
+      used: number;
+      limit: number;
+      nextReleaseAt: string | null;
+    }
   | { outcome: "duplicate"; usageId: string; status: string; auditId: string | null }
-  | { outcome: "quota_exceeded"; plan: Plan; used: number; limit: number; periodEnd: string }
+  | {
+      outcome: "quota_exceeded";
+      plan: Plan;
+      used: number;
+      limit: number;
+      availableAt: string | null;
+    }
   | { outcome: "too_many_concurrent" }
   | { outcome: "no_workspace" };
 
@@ -94,7 +122,7 @@ export interface QuotaPort {
   finish(usageId: string, status: "failed" | "released"): Promise<void>;
   /** Informe de un análisis ya hecho (reintento de una petición idempotente). */
   reportOf(auditId: string): Promise<AuditReport | null>;
-  /** Guarda el consumo del periodo bajo un HMAC del correo antes de la baja. */
+  /** Guarda el consumo que aún cuenta bajo un HMAC del correo antes de la baja. */
   recordDeletion(userId: string, emailHash: string): Promise<void>;
   logSecurityEvent(event: {
     userId: string | null;

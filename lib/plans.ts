@@ -10,18 +10,42 @@
 
 export type Plan = "free" | "pro";
 
+/**
+ * Ventana móvil de la cuota, en días. Cada análisis consumido cuenta durante
+ * los QUOTA_WINDOW_DAYS días siguientes al momento en que se hizo (UTC) y
+ * después se libera. La base de datos la valida (1–31 días).
+ */
+export const QUOTA_WINDOW_DAYS = 7;
+
 export type Entitlements = {
   plan: Plan;
   label: string;
-  /** Análisis por periodo (mes natural UTC en Free). */
-  monthlyAudits: number;
-  /** Análisis que se conservan en el historial. */
+  /** Análisis permitidos en cualquier ventana de QUOTA_WINDOW_DAYS días. */
+  auditsPerWindow: number;
+  /** Análisis que se conservan en el historial (los más recientes). */
   historySize: number;
+  /** Informe completo y descarga en PDF. */
+  fullReports: boolean;
+  pdfExport: boolean;
 };
 
 export const PLANS: Record<Plan, Entitlements> = {
-  free: { plan: "free", label: "Free", monthlyAudits: 5, historySize: 10 },
-  pro: { plan: "pro", label: "Pro", monthlyAudits: 100, historySize: 100 },
+  free: {
+    plan: "free",
+    label: "Free",
+    auditsPerWindow: 5,
+    historySize: 10,
+    fullReports: true,
+    pdfExport: true,
+  },
+  pro: {
+    plan: "pro",
+    label: "Pro",
+    auditsPerWindow: 25,
+    historySize: 50,
+    fullReports: true,
+    pdfExport: true,
+  },
 };
 
 /**
@@ -33,9 +57,9 @@ export function entitlementsFor(plan: string | null | undefined): Entitlements {
   return plan === "pro" ? PLANS.pro : PLANS.free;
 }
 
-/** Límites por plan en el formato que espera la función SQL `reserve_audit`. */
+/** Límites por plan en el formato que esperan las funciones SQL de consumo. */
 export function auditLimitsByPlan(): Record<Plan, number> {
-  return { free: PLANS.free.monthlyAudits, pro: PLANS.pro.monthlyAudits };
+  return { free: PLANS.free.auditsPerWindow, pro: PLANS.pro.auditsPerWindow };
 }
 
 /** Análisis simultáneos por cuenta. Los planes no cambian la seguridad. */
@@ -58,7 +82,7 @@ export const RATE_LIMITS = {
   /** Solicitudes de recuperación por IP y por cuenta. */
   recoveryByIp: { max: 5, windowSeconds: 3_600 },
   recoveryByEmail: { max: 3, windowSeconds: 3_600 },
-  /** Análisis por minuto de una cuenta (además de su cuota mensual). */
+  /** Análisis por minuto de una cuenta (además de su cuota semanal). */
   auditsByUser: { max: 6, windowSeconds: 60 },
   /** Cambios de cuenta (contraseña, correo, borrado…) por usuario. */
   accountChanges: { max: 10, windowSeconds: 600 },

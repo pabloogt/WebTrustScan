@@ -197,7 +197,26 @@ const CONDITION_LABEL: Record<AuditReport["target"]["condition"], string> = {
   blocked: "Bloqueado por WAF/CDN",
 };
 
-export default function ReportView({ report }: { report: AuditReport }) {
+export default function ReportView({
+  report,
+  onBack,
+  backLabel = "Volver",
+}: {
+  report: AuditReport;
+  /** Si se indica, el informe muestra un botón para volver (p. ej. al historial). */
+  onBack?: () => void;
+  backLabel?: string;
+}) {
+  const backButton = onBack && (
+    <button
+      type="button"
+      onClick={onBack}
+      className="no-print rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-500"
+    >
+      ← {backLabel}
+    </button>
+  );
+
   const [view, setView] = useState<View>("executive");
   const [printing, setPrinting] = useState(false);
   const scanned = new Date(report.scannedAt);
@@ -270,6 +289,7 @@ export default function ReportView({ report }: { report: AuditReport }) {
 
   return (
     <div className="report space-y-8">
+      {backButton}
       <header className={card}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
@@ -416,6 +436,7 @@ export default function ReportView({ report }: { report: AuditReport }) {
           comprobados, no la ausencia de vulnerabilidades.
         </p>
       </footer>
+      {backButton}
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import ReportView from "@/components/report/ReportView";
 import type { AuditSummary } from "@/lib/accounts/ports";
 import type { AccountOverview } from "@/lib/accounts/service";
@@ -17,14 +17,22 @@ import {
   primaryButton,
   secondaryButton,
 } from "./api";
+import { releaseText, usageSummary } from "./quotaText";
 
 type Tab = "resumen" | "configuracion" | "plan";
 type Notice = { kind: "error" | "ok"; text: string } | null;
 
 const formatDate = (value: string) =>
   new Date(value).toLocaleString("es-ES", { dateStyle: "medium", timeStyle: "short" });
-const formatDay = (value: string) =>
-  new Date(value).toLocaleDateString("es-ES", { dateStyle: "long", timeZone: "UTC" });
+
+/** Desplazamiento suave, salvo si el usuario ha pedido reducir el movimiento. */
+function scrollToElement(element: HTMLElement | null) {
+  if (!element) return;
+  const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  element.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  // El foco acompaña al desplazamiento (teclado y lectores de pantalla).
+  element.focus({ preventScroll: true });
+}
 
 function UsageBar({ used, total }: { used: number; total: number }) {
   const share = total === 0 ? 0 : Math.min(100, (used / total) * 100);
@@ -61,6 +69,10 @@ export default function Panel() {
   const [account, setAccount] = useState<AccountOverview | null>(null);
   const [audits, setAudits] = useState<AuditSummary[]>([]);
   const [report, setReport] = useState<AuditReport | null>(null);
+  /** Análisis del historial cuyo informe se está mostrando. */
+  const [openId, setOpenId] = useState<string | null>(null);
+  const historyRef = useRef<HTMLElement>(null);
+  const reportRef = useRef<HTMLDivElement>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -133,10 +145,22 @@ export default function Panel() {
     };
   }, [router]);
 
+  // Cuando el informe ya está en el DOM (los efectos se ejecutan tras
+  // insertarlo), se baja hasta su cabecera. `scrollIntoView` calcula la
+  // posición en ese momento, así que no hace falta esperar a otro fotograma.
+  useEffect(() => {
+    if (report) scrollToElement(reportRef.current);
+  }, [report]);
+
   const openAudit = (id: string) =>
     act(`open:${id}`, async () => {
-      setReport((await api<{ report: AuditReport }>(`/api/audits/${id}`)).report);
+      const { report: loaded } = await api<{ report: AuditReport }>(`/api/audits/${id}`);
+      // Siempre un objeto nuevo: abrir otra vez el mismo informe vuelve a bajar.
+      setReport({ ...loaded });
+      setOpenId(id);
     });
+
+  const backToHistory = () => scrollToElement(historyRef.current);
 
   const removeAudit = (audit: AuditSummary) => {
     if (
@@ -148,7 +172,10 @@ export default function Panel() {
     }
     void act(`delete:${audit.id}`, async () => {
       await api(`/api/audits/${audit.id}`, { method: "DELETE" });
-      setReport(null);
+      if (openId === audit.id) {
+        setReport(null);
+        setOpenId(null);
+      }
       await load();
     });
   };
@@ -268,29 +295,41 @@ export default function Panel() {
 
       {tab === "resumen" && (
         <>
-          <section className={card} aria-label="Consumo del periodo">
+          <section className={card} aria-label="Consumo de análisis">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="text-lg font-semibold">Análisis de este periodo</h2>
+              <h2 className="text-lg font-semibold">
+                Análisis de los últimos {usage.windowDays} días
+              </h2>
               <p className="text-2xl font-bold tabular-nums">
                 {usage.used}{" "}
-                <span className="text-base font-normal text-slate-400">
-                  de {plan.monthlyAudits}
-                </span>
+                <span className="text-base font-normal text-slate-400">de {usage.limit}</span>
               </p>
             </div>
             <div className="mt-3">
-              <UsageBar used={usage.used} total={plan.monthlyAudits} />
+              <UsageBar used={usage.used} total={usage.limit} />
             </div>
-            <p className="mt-3 text-sm text-slate-400">
+            <p className="mt-3 text-sm text-slate-300">
+              {usageSummary(usage.used, usage.limit, usage.windowDays)}.{" "}
               {usage.remaining > 0
                 ? `Te quedan ${usage.remaining}.`
-                : "Has usado todos los análisis de este periodo."}{" "}
-              El contador se reinicia el {formatDay(usage.periodEnd)} (UTC). Borrar
-              análisis del historial no devuelve los ya consumidos.
+                : "No te quedan análisis por ahora."}
+            </p>
+            {releaseText(usage) && (
+              <p className="mt-1 text-sm text-slate-400">{releaseText(usage)}</p>
+            )}
+            <p className="mt-3 text-xs text-slate-500">
+              Cada análisis cuenta durante {usage.windowDays} días desde que lo
+              haces y después se libera. Borrar un análisis del historial no
+              devuelve el uso consumido.
             </p>
           </section>
 
-          <section className={card} aria-label="Historial de análisis">
+          <section
+            ref={historyRef}
+            tabIndex={-1}
+            className={`${card} scroll-mt-6 outline-none`}
+            aria-label="Historial de análisis"
+          >
             <h2 className="text-lg font-semibold">
               Historial{" "}
               <span className="text-sm font-normal text-slate-400">
@@ -309,7 +348,13 @@ export default function Panel() {
             ) : (
               <ul className="mt-4 divide-y divide-slate-800">
                 {audits.map((audit) => (
-                  <li key={audit.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3 text-sm">
+                  <li
+                    key={audit.id}
+                    aria-current={openId === audit.id ? "true" : undefined}
+                    className={`flex flex-wrap items-center gap-x-4 gap-y-2 py-3 text-sm ${
+                      openId === audit.id ? "-mx-3 rounded-xl bg-slate-800/60 px-3" : ""
+                    }`}
+                  >
                     <span className="min-w-0 flex-1 break-all font-medium">{audit.hostname}</span>
                     <span className="tabular-nums">
                       {audit.webScore === null ? (
@@ -324,7 +369,7 @@ export default function Panel() {
                     <span className="text-slate-400">{formatDate(audit.createdAt)}</span>
                     <span className="flex gap-2">
                       <button type="button" className={secondaryButton} disabled={busy !== null} onClick={() => openAudit(audit.id)}>
-                        Ver informe
+                        {busy === `open:${audit.id}` ? "Abriendo…" : "Ver informe"}
                       </button>
                       <button type="button" className={secondaryButton} disabled={busy !== null} onClick={() => removeAudit(audit)}>
                         Eliminar
@@ -336,7 +381,17 @@ export default function Panel() {
             )}
           </section>
 
-          {report && <ReportView report={report} />}
+          {report && (
+            <div
+              ref={reportRef}
+              id="informe"
+              tabIndex={-1}
+              aria-label={`Informe de ${report.target.host}`}
+              className="scroll-mt-6 outline-none"
+            >
+              <ReportView report={report} onBack={backToHistory} backLabel="Volver al historial" />
+            </div>
+          )}
         </>
       )}
 
@@ -445,8 +500,8 @@ export default function Panel() {
           <div>
             <h2 className="text-lg font-semibold">Tu plan: {plan.label}</h2>
             <p className="mt-1 text-sm text-slate-400">
-              {usage.used} de {plan.monthlyAudits} análisis usados en este periodo,
-              que termina el {formatDay(usage.periodEnd)} (UTC).
+              {usageSummary(usage.used, usage.limit, usage.windowDays)}.{" "}
+              {releaseText(usage)}
             </p>
           </div>
 
@@ -469,9 +524,11 @@ export default function Panel() {
               </thead>
               <tbody className="divide-y divide-slate-800">
                 <tr>
-                  <th scope="row" className="py-2 pr-4 font-normal text-slate-300">Análisis por periodo</th>
+                  <th scope="row" className="py-2 pr-4 font-normal text-slate-300">
+                    Análisis cada {plan.windowDays} días
+                  </th>
                   {Object.values(PLANS).map((entry) => (
-                    <td key={entry.plan} className="py-2 pr-4 tabular-nums">{entry.monthlyAudits}</td>
+                    <td key={entry.plan} className="py-2 pr-4 tabular-nums">{entry.auditsPerWindow}</td>
                   ))}
                 </tr>
                 <tr>
@@ -483,7 +540,9 @@ export default function Panel() {
                 <tr>
                   <th scope="row" className="py-2 pr-4 font-normal text-slate-300">Informes completos y PDF</th>
                   {Object.values(PLANS).map((entry) => (
-                    <td key={entry.plan} className="py-2 pr-4">Sí</td>
+                    <td key={entry.plan} className="py-2 pr-4">
+                      {entry.fullReports && entry.pdfExport ? "Sí" : "No"}
+                    </td>
                   ))}
                 </tr>
               </tbody>

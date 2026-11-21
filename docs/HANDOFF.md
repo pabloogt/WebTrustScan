@@ -152,9 +152,10 @@ Para **Preview privado** hacen falta los pasos 2 a 12. Para **beta pública**, a
 |---|---|---|---|
 | Correo y contraseña (hash) | Supabase Auth | Identificar la cuenta | Hasta que se elimine la cuenta |
 | Nombre visible (opcional) | `profiles` | Mostrarlo en el panel | Hasta que se elimine |
-| Informes de análisis | `audits` | Historial | Los 10 (Free) o 100 (Pro) más recientes; hasta que se borren o se elimine la cuenta |
-| Registro de consumo | `usage_events` | Aplicar la cuota | Hasta que se elimine la cuenta. **No hay purga de periodos antiguos** |
-| HMAC del correo + consumo del periodo | `usage_carryover` | Evitar reiniciar la cuota con una baja | Hasta 62 días tras la baja |
+| Informes de análisis | `audits` | Historial | Los 10 (Free) o 50 (Pro) más recientes; hasta que se borren o se elimine la cuenta |
+| Registro de consumo | `usage_events` | Aplicar la cuota (ventana de 7 días) | Hasta que se elimine la cuenta. **No hay purga de consumos antiguos** |
+| HMAC del correo + fecha de cada uso | `usage_carryover_events` | Evitar reiniciar la cuota con una baja | Hasta 31 días |
+| HMAC del correo + consumo del periodo (sistema mensual anterior) | `usage_carryover` | Ya no se escribe; se sigue leyendo | Filas existentes, sin borrar |
 | Eventos de seguridad con HMAC de IP | `security_events` | Detectar abuso | 90 días, **si se programa la purga** |
 | HMAC de IP y de correo en contadores | Upstash | Límites de frecuencia | Minutos a 24 horas |
 | URL analizada sin cuenta | En ningún sitio | — | No se guarda |

@@ -11,7 +11,31 @@ Este documento separa cuatro niveles que no son lo mismo:
 | **Sin verificar** | Implementado, pero no ejecutado contra el servicio real. |
 | **No implementado** | No existe. |
 
-## 1. Suite automática
+## 0. Actualización del 17 de noviembre de 2026 (recuperación, cuota de 7 días, historial)
+
+`npx vitest run`: **566 pruebas, 566 pasan, 0 fallan**, en 25 ficheros. `tsc --noEmit` y `eslint .` sin errores; `next build` correcto (19 rutas: `/auth/confirm` pasa a ser página y se añade `POST /api/auth/confirm`).
+
+| Fichero | Pruebas | Cambio |
+|---|---|---|
+| `db/rolling` (nuevo) | 17 | Ventana móvil: 5/25 en 7 días, liberación exacta al milisegundo, zonas horarias, simultaneidad, idempotencia, borrar historial no devuelve usos, consumo anterior por su fecha real, Pro→Free, baja y nuevo registro, arrastres antiguos, purga, ventana válida |
+| `db/rls` | 20 | La tabla nueva tiene RLS y nadie salvo el servidor la lee ni la escribe; un usuario no puede ejecutar las funciones nuevas |
+| `accounts/flows` | 41 (+6) | Canje del enlace por POST y mismo origen; enlace `?code=` (PKCE); enlace caducado o usado; espera de 60 s y límite por hora sin delatar la cuenta; rechazo del proveedor registrado sin el correo; pase de recuperación caducado con mensaje propio |
+| `accounts/analyze` | 20 | Cuota de 7 días por la ruta real del analizador y fecha de liberación |
+| `accounts/limits` | 57 | Valores nuevos de Free y Pro |
+| `accounts/quotaText` (nuevo) | 4 | Textos «3 de 5 análisis utilizados en los últimos 7 días» y fechas en hora local |
+
+Las pruebas de cuentas ejecutan **las mismas llamadas** (`lib/accounts/quotaRpc.ts`: nombre de función y argumentos) que el adaptador real envía a Supabase.
+
+**Comprobado a mano (navegador integrado, `next dev` local):**
+
+- `/auth/confirm` con `token_hash` muestra el botón y **no** canjea nada al abrirse; con `error_code=otp_expired` (en la consulta o en el fragmento `#`) muestra «Este enlace ya no es válido» y «Solicitar otro enlace», que abre `/acceso?modo=recuperar` directamente en el formulario de recuperación.
+- Espera de 60 s: tras enviar (con la respuesta de `/api/auth/recover` **simulada en el navegador**, sin enviar correo), el botón queda desactivado con cuenta atrás, la espera sobrevive a recargar la página y el botón vuelve al terminar.
+- Panel con datos simulados: texto de consumo y fecha en hora local (17:05 UTC → 18:05 CET); «Ver informe» muestra un único informe, marca la fila, mueve el foco al informe y la cabecera queda a 24 px del borde superior; «Volver al historial» (arriba y abajo del informe, ocultos al imprimir) mueve el foco al historial; cambiar de informe no duplica nada.
+- **No observado:** la animación del desplazamiento suave. El panel del navegador estaba oculto y no pinta fotogramas; el destino del desplazamiento sí se comprobó con un desplazamiento instantáneo.
+
+**Sin verificar contra el servicio real:** el canje de enlaces y el envío de correos con Supabase Cloud, `exchangeCodeForSession`, y las funciones SQL nuevas en Supabase (solo en PostgreSQL embebido). No se ha creado ni modificado ninguna cuenta del proyecto en la nube.
+
+## 1. Suite automática (16 de noviembre de 2026)
 
 `npx vitest run`: **539 pruebas, 539 pasan, 0 fallan**, en 23 ficheros.
 

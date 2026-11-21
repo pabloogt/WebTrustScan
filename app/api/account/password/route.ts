@@ -1,5 +1,5 @@
 import { RECOVERY_COOKIE, verifyRecoveryTicket } from "@/lib/accounts/analyze";
-import { json, readJson, requireUser, route } from "@/lib/accounts/http";
+import { errorResponse, json, readJson, requireUser, route } from "@/lib/accounts/http";
 import { changePassword } from "@/lib/accounts/service";
 
 export const POST = route(async ({ request, deps }) => {
@@ -10,9 +10,13 @@ export const POST = route(async ({ request, deps }) => {
     user.id,
   );
 
-  await changePassword(deps, user, request.headers, await readJson(request), {
-    requireCurrent: !recovering,
-  });
+  try {
+    await changePassword(deps, user, request.headers, await readJson(request), {
+      requireCurrent: !recovering,
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
 
   const response = json({ ok: true });
   // El pase es de un solo uso.

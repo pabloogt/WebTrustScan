@@ -134,7 +134,7 @@ Pasos para ti, en este orden. No crees nada hasta que decidas publicar las cuent
    npx supabase db push
    ```
    `TU_PROJECT_REF` es el código que aparece en la URL del panel (`…/project/abcdefghijklmnop`). `db push` enseña las migraciones que va a aplicar y pide confirmación.
-3. **Comprobar RLS.** En el panel: **Database → Tables**. Las diez tablas de `public` deben mostrar «RLS enabled». Después **Advisors → Security Advisor**: no debe haber avisos de tablas sin RLS.
+3. **Comprobar RLS.** En el panel: **Database → Tables**. Las once tablas de `public` deben mostrar «RLS enabled». Después **Advisors → Security Advisor**: no debe haber avisos de tablas sin RLS.
 4. **Autenticación.** En **Authentication**:
    - **URL Configuration** → *Site URL:* la URL pública de la aplicación (la de Preview). *Redirect URLs:* añade `https://TU-DOMINIO/auth/confirm`.
    - **Sign In / Providers → Email:** activa *Confirm email*, *Secure email change* y *Secure password change*; *Minimum password length:* `10`. Si aparece *Prevent use of leaked passwords*, actívalo (puede requerir un plan de pago).
@@ -166,3 +166,18 @@ Pasos para ti, en este orden. No crees nada hasta que decidas publicar las cuent
 | Reutilización de un token ya rotado | 10 s de margen; después se revoca la sesión | `refresh_token_reuse_interval` |
 | Caducidad por inactividad y duración máxima | **Sin definir.** En Supabase son opciones de pago (*Authentication → Sessions*). Recomendado al activarlas: 7 días de inactividad y 30 de duración máxima | Panel |
 | MFA (TOTP) | Desactivado. Supabase lo ofrece de serie; conviene exigirlo a las cuentas de administrador antes de darles ninguna función | `auth.mfa.totp` |
+
+## Parte C · La recuperación de contraseña no funciona: cómo diagnosticarlo
+
+La aplicación no puede ver la configuración ni los registros del proyecto en la nube. Comprueba, en este orden:
+
+1. **Plantilla *Reset password*** (*Authentication → Emails → Templates*). Debe ser la de `supabase/templates/recovery.html`, cuyo enlace es `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/cuenta/nueva-contrasena`. Con la plantilla predeterminada (`{{ .ConfirmationURL }}`) el enlace pasa primero por Supabase y vuelve con `?code=`; la aplicación lo acepta, pero **solo en el mismo navegador** donde se pidió la recuperación (flujo PKCE). Si se abre en otro dispositivo, fallará.
+2. **URL Configuration.** *Site URL* = la URL pública de la aplicación (sin barra final). *Redirect URLs* debe incluir `https://TU-DOMINIO/auth/confirm`. Si la dirección no está permitida, Supabase redirige a la *Site URL* y el enlace no llega a la aplicación.
+3. **Registros de Auth** (*Logs → Auth*). Busca la hora de la solicitud:
+   - `over_email_send_rate_limit` o `email rate limit exceeded`: se ha alcanzado el tope de correos. Sin SMTP propio, Supabase envía muy pocos por hora. **Esta es la causa más probable de que «el segundo correo no llegue».** Solución: SMTP propio (Resend, Parte B, paso 5).
+   - `For security purposes, you can only request this after N seconds`: se pidió otro correo antes de 60 s (`max_frequency`). La pantalla ya obliga a esperar.
+   - `otp_expired` / `One-time token not found`: el enlace ya se usó, caducó o se pidió otro después (solo vale el último).
+4. **Registro de la aplicación** (logs de Vercel). Cuando no se envía un correo se escribe `Recuperación: no se ha enviado el correo.` con el motivo (`cooldown_60s`, `app_hourly_limit` o `provider:<código de Supabase>`), nunca el correo. Lo mismo queda en `security_events` como `recovery_not_sent`.
+5. **Filtros de correo.** Algunos antispam abren los enlaces para analizarlos. Antes, eso gastaba el token y el usuario veía «ha caducado». Ahora `/auth/confirm` exige pulsar un botón; si aun así ocurre, el registro de Auth mostrará un canje que el usuario no hizo.
+
+No hace falta cambiar la caducidad de los enlaces (1 hora) ni desactivar ninguna protección.

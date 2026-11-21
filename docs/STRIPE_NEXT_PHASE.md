@@ -9,7 +9,7 @@
 | Planes y capacidades separados del proveedor de pagos | `lib/plans.ts` → `entitlementsFor(plan)` | En uso |
 | Plan efectivo calculado en la base de datos | Función SQL `effective_plan` | En uso y probado |
 | Tabla de suscripciones | `public.subscriptions` | Creada; hoy todas las filas son `free` / `provider = 'none'` |
-| Periodo de consumo ligado al ciclo de facturación | Función SQL `usage_period` | Probado con fechas simuladas |
+| Periodo de consumo ligado al ciclo de facturación | Función SQL `usage_period` | Ya **no decide la cuota** (desde el 17-11-2026 la cuota es una ventana móvil de 7 días); solo rellena `period_start` por compatibilidad |
 | Tabla de eventos de facturación procesados | `public.billing_webhook_events` (clave: proveedor + id de evento) | Creada, vacía |
 | Tipos e interfaz del proveedor | `lib/billing/provider.ts` (`BillingProvider`, `SubscriptionChange`) | Solo tipos; sin implementación |
 | Botón de contratación | Pestaña «Plan» del panel | **Desactivado**, con el texto «Pro · próximamente» |
@@ -80,8 +80,8 @@ Con `cancel_at_period_end = true` la suscripción sigue `active` hasta el final 
 
 `usage_period` ya usa `current_period_start` / `current_period_end` cuando la suscripción es Pro y está vigente. Decisiones pendientes:
 
-- Al pasar de Free a Pro a mitad de mes, ¿los análisis ya consumidos cuentan en el nuevo periodo? Hoy **no**: el ciclo de facturación empieza un periodo nuevo.
-- Al volver a Free, el periodo pasa a ser el mes natural y cuenta lo consumido en él.
+- La cuota es una ventana móvil de 7 días independiente del ciclo de facturación (ver `PLANS_AND_QUOTAS.md` §3). Al pasar de Free a Pro, los usos de los últimos 7 días siguen contando, ahora contra el límite de Pro (25).
+- Al volver a Free con más de 5 usos en la ventana, no se podrá analizar hasta que bajen de 5; el panel indica la fecha.
 
 ## 4. Seguridad
 

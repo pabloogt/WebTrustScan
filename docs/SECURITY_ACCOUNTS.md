@@ -30,8 +30,8 @@ Navegador ──(mismo origen, cookies HttpOnly)──▶ Rutas de Next.js ─�
 | Confirmación de correo | Sin confirmar no hay sesión; además la aplicación descarta cualquier usuario sin `email_confirmed_at`. | [APP] |
 | Acceso | Un único mensaje para contraseña incorrecta, cuenta inexistente, correo sin confirmar y entrada malformada. | [APP] |
 | Fuerza bruta | 10 intentos por minuto por IP **y** 10 por cuarto de hora por cuenta (protege frente a ataques distribuidos). Más los límites propios de Supabase. | [APP] |
-| Recuperación | Respuesta idéntica exista o no la cuenta; 5 por hora por IP y 3 por hora por cuenta. | [APP] |
-| Enlaces de correo | Se canjean en el servidor (`/auth/confirm`, flujo `token_hash` recomendado para SSR). Un solo uso, caducan en una hora. | [APP] · contra Supabase [SIN VERIFICAR] |
+| Recuperación | Respuesta idéntica exista o no la cuenta y se envíe o no el correo; como mucho un correo por minuto y 3 por hora por cuenta, y 5 solicitudes por hora por IP. La pantalla espera 60 s antes de dejar pedir otro (igual que `max_frequency` de Supabase). Si Supabase rechaza el envío, el motivo (p. ej. `over_email_send_rate_limit`) se registra en el log del servidor y en `security_events` como `recovery_not_sent`, sin el correo. | [APP] · envío real [SIN VERIFICAR] |
+| Enlaces de correo | La página `/auth/confirm` **no canjea el enlace al abrirse**: muestra un botón y el canje lo hace `POST /api/auth/confirm` (mismo origen). Así, un filtro antispam o una vista previa que abra el enlace no gasta el token de un solo uso, que era la causa más probable de «el enlace ha caducado» en la primera visita. Admite `token_hash` + `type` (plantillas propias) y `code` (enlace predeterminado de Supabase, flujo PKCE), y reconoce los errores que Supabase añade a la URL (`error_code=otp_expired`) para ofrecer pedir otro enlace. Un solo uso; caducan en una hora (no se ha cambiado). | [APP] · contra Supabase [SIN VERIFICAR] |
 | Redirección tras el enlace | Solo a rutas internas; una URL absoluta, `//host` o `..` se sustituyen por `/panel`. | [APP] |
 | Contraseñas débiles o filtradas | Las rechaza Supabase (la comprobación de filtraciones depende del plan). | [SIN VERIFICAR] |
 | CAPTCHA | No integrado. Supabase admite Turnstile y hCaptcha; activarlo exige una cuenta del proveedor y ampliar la CSP. Recomendado si aparecen altas automatizadas. | No implementado |
@@ -50,7 +50,7 @@ Navegador ──(mismo origen, cookies HttpOnly)──▶ Rutas de Next.js ─�
 
 Todo lo anterior está [APP] para la lógica propia y [SIN VERIFICAR] para el comportamiento real de las cookies de Supabase en un dominio HTTPS.
 
-**Pase de recuperación.** Tras abrir un enlace de recuperación se puede fijar una contraseña nueva sin conocer la anterior durante 15 minutos. Lo acredita una cookie `HttpOnly` firmada con HMAC y ligada al usuario; es de un solo uso. Sin ese pase —por ejemplo, con una sesión robada— cambiar la contraseña, el correo o borrar la cuenta exige la contraseña actual. [APP]: pase inventado, caducado o de otro usuario se rechazan.
+**Pase de recuperación.** Tras canjear un enlace de recuperación se puede fijar una contraseña nueva sin conocer la anterior durante 15 minutos. Lo acredita una cookie `HttpOnly` firmada con HMAC y ligada al usuario; es de un solo uso. Solo se concede por un enlace `type=recovery` o por un `code` cuyo destino sea `/cuenta/nueva-contrasena` (destino que fija la propia aplicación al pedir la recuperación). Sin ese pase —por ejemplo, con una sesión robada— cambiar la contraseña, el correo o borrar la cuenta exige la contraseña actual. Si el pase caduca en la pantalla de recuperación, el mensaje lo dice y ofrece pedir otro enlace (antes decía «La contraseña actual no es correcta»). [APP]: pase inventado, caducado o de otro usuario se rechazan.
 
 ## 4. CSRF y validación de origen
 
@@ -83,14 +83,14 @@ Diez tablas en `public`, **todas con RLS activado** [BD].
 | `subscriptions` | Ver la de sus espacios | Cambiar plan, estado, periodo o identificadores |
 | `audits` | Ver y borrar los de sus espacios | Insertar o modificar análisis |
 | `usage_events` | Ver los de sus espacios | Insertar, modificar o borrar consumo |
-| `usage_carryover`, `app_admins`, `security_events`, `billing_webhook_events` | Nada | Nada (sin políticas: solo servidor) |
+| `usage_carryover`, `usage_carryover_events`, `app_admins`, `security_events`, `billing_webhook_events` | Nada | Nada (sin políticas: solo servidor) |
 
 Dos capas independientes:
 
 1. **Permisos.** Se revocan todos y se conceden solo los necesarios, por columna cuando aplica (`grant update (display_name)`). Sin permiso, la operación falla con `42501` aunque una política lo permitiera.
 2. **Políticas RLS.** Filtran las filas: cada usuario ve solo las de espacios a los que pertenece.
 
-Las funciones que consumen cuota (`reserve_audit`, `complete_audit`, `finish_audit`, `workspace_usage`, `record_account_deletion`) solo son ejecutables por `service_role`.
+Las funciones que consumen cuota (`reserve_audit_rolling`, `workspace_usage_rolling`, `record_account_deletion_rolling`, `rolling_usage`, `quota_window`, `complete_audit`, `finish_audit`, y las anteriores `reserve_audit`, `workspace_usage` y `record_account_deletion`) solo son ejecutables por `service_role`.
 
 ### Pruebas de aislamiento [BD]
 
@@ -139,12 +139,12 @@ Definidos en `lib/plans.ts`, aplicados por `lib/limits.ts` con `@upstash/ratelim
 
 - **Exportar:** descarga un JSON con perfil, espacios, suscripción, análisis y consumo, leído con la sesión del usuario. [APP]
 - **Eliminar:** exige contraseña y escribir `ELIMINAR`. Borra el usuario en Supabase Auth y, en cascada, perfil, espacio, pertenencias, suscripción, análisis y consumo. [APP] [BD]
-- **Lo único que se conserva:** el número de análisis consumidos en el periodo, bajo un HMAC del correo, hasta 62 días. Sirve para que darse de baja y volver a registrarse no reinicie la cuota. No permite recuperar el correo.
+- **Lo único que se conserva:** la fecha de cada análisis que aún cuenta en la ventana de 7 días, bajo un HMAC del correo (`usage_carryover_events`); se purga a los 31 días. Sirve para que darse de baja y volver a registrarse no reinicie la cuota. No permite recuperar el correo. Los arrastres anteriores del sistema mensual (`usage_carryover`) se siguen leyendo y no se han borrado.
 - Los eventos de seguridad de la cuenta borrada quedan sin identificador de usuario y se purgan a los 90 días con `purge_security_events()` (hay que programarla: no se ejecuta sola).
 
 ## 9. Registro de seguridad
 
-Tabla `security_events`: alta solicitada, acceso fallido, recuperación solicitada, contraseña cambiada, cambio de correo solicitado, cuenta eliminada. Guarda tipo, fecha, identificador de usuario cuando procede y HMAC de la IP. **Nunca** contraseñas, tokens, correos ni IP en claro. [APP]
+Tabla `security_events`: alta solicitada, acceso fallido, recuperación solicitada, recuperación no enviada (con el motivo), contraseña cambiada, cambio de correo solicitado, cuenta eliminada. Guarda tipo, fecha, identificador de usuario cuando procede y HMAC de la IP. **Nunca** contraseñas, tokens, correos ni IP en claro. [APP]
 
 No se registran todavía los accesos correctos ni los cambios de plan o de rol (no existe ninguna ruta que los haga).
 

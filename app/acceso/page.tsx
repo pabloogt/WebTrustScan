@@ -9,11 +9,14 @@ export const metadata: Metadata = { title: "Acceso · WebTrustScan" };
 export default async function AccessPage({
   searchParams,
 }: {
-  searchParams: Promise<{ estado?: string }>;
+  searchParams: Promise<{ estado?: string; modo?: string }>;
 }) {
-  if (await pageSession()) redirect("/panel");
+  const { estado, modo } = await searchParams;
+  const recovering = modo === "recuperar";
 
-  const { estado } = await searchParams;
+  // Con sesión se va al panel, salvo si se pide expresamente otro enlace de
+  // recuperación (p. ej. porque el anterior caducó tras abrirse).
+  if (!recovering && (await pageSession())) redirect("/panel");
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-16 text-white">
@@ -27,7 +30,7 @@ export default async function AccessPage({
           quieras.
         </p>
         <div className="mt-8">
-          <AccessForm notice={estado} />
+          <AccessForm notice={estado} initialMode={recovering ? "recover" : "login"} />
         </div>
       </div>
     </main>

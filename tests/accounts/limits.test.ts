@@ -11,7 +11,7 @@ import { POST as login } from "@/app/api/auth/login/route";
 import { POST as logout } from "@/app/api/auth/logout/route";
 import { POST as recover } from "@/app/api/auth/recover/route";
 import { POST as register } from "@/app/api/auth/register/route";
-import { GET as confirm } from "@/app/auth/confirm/route";
+import { POST as confirm } from "@/app/api/auth/confirm/route";
 import { accountsEnabled, appBaseUrl, supabaseConfig } from "@/lib/accounts/config";
 import { setAccountDepsForTests } from "@/lib/accounts/http";
 import {
@@ -28,6 +28,7 @@ import {
 import {
   ANONYMOUS,
   PLANS,
+  QUOTA_WINDOW_DAYS,
   RATE_LIMITS,
   auditLimitsByPlan,
   entitlementsFor,
@@ -54,10 +55,11 @@ afterEach(() => {
 
 describe("planes · configuración única", () => {
   it("valores provisionales de Free y Pro", () => {
-    expect(PLANS.free).toMatchObject({ monthlyAudits: 5, historySize: 10 });
-    expect(PLANS.pro).toMatchObject({ monthlyAudits: 100, historySize: 100 });
+    expect(QUOTA_WINDOW_DAYS).toBe(7);
+    expect(PLANS.free).toMatchObject({ auditsPerWindow: 5, historySize: 10, fullReports: true, pdfExport: true });
+    expect(PLANS.pro).toMatchObject({ auditsPerWindow: 25, historySize: 50, fullReports: true, pdfExport: true });
     expect(ANONYMOUS.auditsPerDay).toBe(2);
-    expect(auditLimitsByPlan()).toEqual({ free: 5, pro: 100 });
+    expect(auditLimitsByPlan()).toEqual({ free: 5, pro: 25 });
   });
 
   it("cualquier plan desconocido o manipulado se trata como Free", () => {
@@ -259,7 +261,7 @@ describe("cuentas desactivadas (valor por defecto)", () => {
     ["POST /api/auth/login", login, { method: "POST", body: { email: "x@y.test", password: "una-frase-larga" } }],
     ["POST /api/auth/logout", logout, { method: "POST", body: {} }],
     ["POST /api/auth/recover", recover, { method: "POST", body: { email: "x@y.test" } }],
-    ["GET /auth/confirm", confirm, { path: "/auth/confirm?token_hash=abc&type=email" }],
+    ["POST /api/auth/confirm", confirm, { method: "POST", body: { tokenHash: "abc", type: "email" } }],
     ["GET /api/account", accountRoute, {}],
     ["PATCH /api/account", profileRoute, { method: "PATCH", body: { displayName: "x" } }],
     ["POST /api/account/password", passwordRoute, { method: "POST", body: { password: "una-frase-larga" } }],

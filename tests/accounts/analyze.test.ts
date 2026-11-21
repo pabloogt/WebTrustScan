@@ -153,10 +153,19 @@ describe("usuarios con cuenta", () => {
     for (let i = 0; i < 6; i += 1) results.push(await analyze({ url: `s${i}.example`, requestId: requestId() }));
 
     expect(results.map((r) => r.status)).toEqual([200, 200, 200, 200, 200, 429]);
-    expect(results[0].data.quota).toMatchObject({ plan: "free", used: 1, limit: 5, remaining: 4 });
+    expect(results[0].data.quota).toMatchObject({ plan: "free", used: 1, limit: 5, remaining: 4, windowDays: 7 });
     expect(results[4].data.quota).toMatchObject({ used: 5, remaining: 0 });
-    expect(results[5].data).toMatchObject({ code: "quota_exceeded", used: 5, limit: 5 });
-    expect(results[5].data.periodEnd).toBeTruthy();
+    expect(results[5].data).toMatchObject({ code: "quota_exceeded", used: 5, limit: 5, windowDays: 7 });
+    expect(results[5].data.error).toMatch(/en los últimos 7 días\. Tendrás uno disponible de nuevo el .* UTC\./);
+
+    // Se libera 7 días después del PRIMER análisis de la ventana (UTC).
+    const first = await env.db.sql<{ created_at: Date }>(
+      "select min(created_at) as created_at from public.usage_events where user_id = $1",
+      [env.session.userId],
+    );
+    const expected = new Date(new Date(first[0].created_at).getTime() + 7 * 86_400_000).toISOString();
+    expect(results[5].data.availableAt).toBe(expected);
+    expect(new Date((results[0].data.quota as { nextReleaseAt: string }).nextReleaseAt).getTime()).toBe(new Date(expected).getTime());
     expect(runAudit).toHaveBeenCalledTimes(5);
 
     const history = await env.db.asUser(env.session.userId, (sql) => sql("select hostname from public.audits"));
@@ -179,7 +188,7 @@ describe("usuarios con cuenta", () => {
       if (i % 5 === 0) post = await reloadRoute();
       const result = await analyze({ url: `p${i}.example`, requestId: requestId() });
       expect(result.status).toBe(200);
-      expect(result.data.quota).toMatchObject({ plan: "pro", limit: 100, used: i + 1 });
+      expect(result.data.quota).toMatchObject({ plan: "pro", limit: 25, used: i + 1 });
     }
   });
 

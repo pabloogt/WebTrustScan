@@ -11,7 +11,7 @@ import type {
   QuotaPort,
 } from "@/lib/accounts/ports";
 import type { AuditReport } from "@/lib/engine/types";
-import { ACCOUNT_MAX_CONCURRENT_AUDITS, auditLimitsByPlan } from "@/lib/plans";
+import { quotaRpc, type RpcCall } from "@/lib/accounts/quotaRpc";
 import { createTestDb, type Sql, type TestDb } from "../db/harness";
 
 /**
@@ -52,7 +52,14 @@ export type Env = {
   session: { userId: string | null };
   users: Map<string, FakeUser>;
   outbox: Mail[];
-  events: { type: string; userId: string | null; ipHash: string | null }[];
+  events: {
+    type: string;
+    userId: string | null;
+    ipHash: string | null;
+    metadata?: Record<string, string | number | boolean>;
+  }[];
+  /** Si se define, la próxima solicitud de recuperación falla así (p. ej. tope de envíos). */
+  resetFailure: AuthResult | null;
   now: { value: number };
   /** Puertos del entorno, para volver a entregarlos si un módulo se recarga. */
   deps: AccountDeps;
@@ -70,6 +77,7 @@ export async function createEnv(): Promise<Env> {
     users: new Map(),
     outbox: [],
     events: [],
+    resetFailure: null,
     now: { value: Date.now() },
     deps: undefined as unknown as AccountDeps,
     close: async () => {
@@ -126,6 +134,11 @@ export async function createEnv(): Promise<Env> {
       if (scope !== "others") env.session.userId = null;
     },
     async requestPasswordReset(email, redirectTo) {
+      if (env.resetFailure) {
+        const failure = env.resetFailure;
+        env.resetFailure = null;
+        return failure;
+      }
       const user = byEmail(email);
       if (user?.confirmed) send(user, email, "recovery", redirectTo);
       return ok; // nunca revela si existe
@@ -149,6 +162,12 @@ export async function createEnv(): Promise<Env> {
       }
       env.session.userId = user.id;
       return ok;
+    },
+    async exchangeCode(code) {
+      // El enlace predeterminado de Supabase (flujo PKCE) trae `?code=`. En
+      // el doble, el código es el mismo valor que el token del correo.
+      const mail = env.outbox.find((entry) => entry.tokenHash === code);
+      return mail ? auth.verifyLink(mail.type, code) : { ok: false, reason: "invalid_link" };
     },
     async verifyPassword(email, password) {
       return byEmail(email)?.password === password;
@@ -242,38 +261,37 @@ export async function createEnv(): Promise<Env> {
   const { toReservation, toUsage } = await import("@/lib/accounts/supabasePorts");
   const service = <T>(work: (sql: Sql) => Promise<T>) => db.asService(work);
 
+  /**
+   * Ejecuta la MISMA llamada que el adaptador real envía a Supabase
+   * (`quotaRpc`): mismo nombre de función y mismos argumentos con nombre.
+   */
+  const rpc = async <T>({ fn, args }: RpcCall): Promise<T> => {
+    const names = Object.keys(args);
+    const values = names.map((name) => {
+      const value = args[name];
+      return value !== null && typeof value === "object" ? JSON.stringify(value) : value;
+    });
+    const [{ r }] = await service((sql) =>
+      sql<{ r: T }>(
+        `select public.${fn}(${names.map((name, i) => `${name} => $${i + 1}`).join(", ")}) as r`,
+        values,
+      ),
+    );
+    return r;
+  };
+
   const quota: QuotaPort = {
     async usage(userId, emailHash) {
-      const [{ r }] = await service((sql) =>
-        sql<{ r: never }>("select public.workspace_usage($1, $2) as r", [userId, emailHash]),
-      );
-      return toUsage(r);
+      return toUsage(await rpc(quotaRpc.usage(userId, emailHash)));
     },
     async reserve(userId, requestId, emailHash) {
-      const [{ r }] = await service((sql) =>
-        sql<{ r: never }>("select public.reserve_audit($1, $2, $3::jsonb, $4, $5) as r", [
-          userId,
-          requestId,
-          JSON.stringify(auditLimitsByPlan()),
-          ACCOUNT_MAX_CONCURRENT_AUDITS,
-          emailHash,
-        ]),
-      );
-      return toReservation(r);
+      return toReservation(await rpc(quotaRpc.reserve(userId, requestId, emailHash)));
     },
     async complete(usageId, hostname, report, historySize) {
-      const [{ id }] = await service((sql) =>
-        sql<{ id: string }>("select public.complete_audit($1, $2, $3::jsonb, $4) as id", [
-          usageId,
-          hostname,
-          JSON.stringify(report),
-          historySize,
-        ]),
-      );
-      return id;
+      return rpc<string>(quotaRpc.complete(usageId, hostname, report, historySize));
     },
     async finish(usageId, status) {
-      await service((sql) => sql("select public.finish_audit($1, $2)", [usageId, status]));
+      await rpc(quotaRpc.finish(usageId, status));
     },
     async reportOf(auditId) {
       const [row] = await service((sql) =>
@@ -282,12 +300,15 @@ export async function createEnv(): Promise<Env> {
       return row?.report ?? null;
     },
     async recordDeletion(userId, emailHash) {
-      await service((sql) =>
-        sql("select public.record_account_deletion($1, $2)", [userId, emailHash]),
-      );
+      await rpc(quotaRpc.recordDeletion(userId, emailHash));
     },
     async logSecurityEvent(event) {
-      env.events.push({ type: event.type, userId: event.userId, ipHash: event.ipHash });
+      env.events.push({
+        type: event.type,
+        userId: event.userId,
+        ipHash: event.ipHash,
+        metadata: event.metadata,
+      });
       await service((sql) =>
         sql("insert into public.security_events (user_id, type, ip_hash) values ($1, $2, $3)", [
           event.userId,

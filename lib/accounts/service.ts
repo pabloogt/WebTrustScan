@@ -1,13 +1,14 @@
-import { clientKey, enforceLimit, pseudonym } from "../limits";
+import { checkLimit, clientKey, enforceLimit, pseudonym } from "../limits";
 import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  QUOTA_WINDOW_DAYS,
   RATE_LIMITS,
   entitlementsFor,
 } from "../plans";
 import { appBaseUrl } from "./config";
-import { AccountError } from "./http";
-import type { AccountDeps, AuthResult, SessionUser } from "./ports";
+import { AccountError, safeNextPath } from "./http";
+import type { AccountDeps, AuthResult, OtpType, SessionUser } from "./ports";
 
 /**
  * Lógica de cuentas. No sabe nada de Supabase: trabaja contra los puertos.
@@ -80,7 +81,7 @@ function assertOk(result: AuthResult, context: "password" | "generic" = "generic
 const GENERIC_REGISTER =
   "Si la dirección es válida, te hemos enviado un correo con un enlace para confirmar la cuenta.";
 const GENERIC_RECOVERY =
-  "Si existe una cuenta con esa dirección, te hemos enviado un correo para restablecer la contraseña.";
+  "Si existe una cuenta con esa dirección, recibirás un correo con un enlace para elegir una contraseña nueva. Puede tardar un par de minutos; revisa también la carpeta de correo no deseado. Solo se envía un correo por minuto.";
 
 export async function register(
   deps: AccountDeps,
@@ -146,31 +147,115 @@ export async function login(
   return user;
 }
 
+/** Segundos mínimos entre dos correos a la misma cuenta (igual que Supabase). */
+export const EMAIL_COOLDOWN_SECONDS = 60;
+
 export async function requestRecovery(
   deps: AccountDeps,
   headers: HeaderReader,
   body: Record<string, unknown>,
-): Promise<{ message: string }> {
+): Promise<{ message: string; retryAfterSeconds: number }> {
   const ip = clientKey(headers);
   await enforceLimit("recovery-ip", ip, RATE_LIMITS.recoveryByIp);
 
   const email = parseEmail(body.email);
-  const perAccount = await enforceLimit(
-    "recovery-email",
-    pseudonym("email", email),
-    RATE_LIMITS.recoveryByEmail,
-  ).catch(() => null);
+  const account = pseudonym("email", email);
+  // Por qué no se envía, si no se envía. Va al log y al registro de
+  // seguridad del servidor; la respuesta al usuario es siempre la misma,
+  // para que no sirva para saber si la cuenta existe.
+  let notSent: string | null = null;
 
-  // Superado el límite por cuenta no se envía nada, pero se responde igual:
-  // la respuesta no puede servir para saber si la cuenta existe.
-  if (perAccount) {
-    await deps.auth.requestPasswordReset(email, confirmUrl("/cuenta/nueva-contrasena"));
-    await deps.quota
-      .logSecurityEvent({ userId: null, type: "recovery_requested", ipHash: ip })
-      .catch(() => undefined);
+  const cooldown = await checkLimit("recovery-cooldown", account, {
+    max: 1,
+    windowSeconds: EMAIL_COOLDOWN_SECONDS,
+  });
+  const hourly = cooldown.allowed
+    ? await checkLimit("recovery-email", account, RATE_LIMITS.recoveryByEmail)
+    : null;
+
+  if (!cooldown.allowed) notSent = "cooldown_60s";
+  else if (!hourly?.allowed) notSent = "app_hourly_limit";
+  else {
+    const result = await deps.auth.requestPasswordReset(
+      email,
+      confirmUrl("/cuenta/nueva-contrasena"),
+    );
+    if (!result.ok) notSent = `provider:${result.code ?? result.reason}`;
   }
 
-  return { message: GENERIC_RECOVERY };
+  if (notSent) {
+    // Sin el correo: solo el motivo. Un «provider:over_email_send_rate_limit»
+    // significa que Supabase ha alcanzado su tope de envíos.
+    console.warn("Recuperación: no se ha enviado el correo.", notSent);
+  }
+
+  await deps.quota
+    .logSecurityEvent({
+      userId: null,
+      type: notSent ? "recovery_not_sent" : "recovery_requested",
+      ipHash: ip,
+      metadata: notSent ? { reason: notSent } : undefined,
+    })
+    .catch(() => undefined);
+
+  return { message: GENERIC_RECOVERY, retryAfterSeconds: EMAIL_COOLDOWN_SECONDS };
+}
+
+export const RECOVERY_PATH = "/cuenta/nueva-contrasena";
+
+/**
+ * Canjea el enlace de un correo. Se hace con una petición POST que el
+ * usuario lanza al pulsar un botón: así, un filtro de correo o una vista
+ * previa que abra el enlace no consume el token de un solo uso.
+ *
+ * Admite las dos formas en que puede llegar: `token_hash` + `type`
+ * (plantillas de WebTrustScan) o `code` (enlace predeterminado de Supabase).
+ */
+export async function confirmLink(
+  deps: AccountDeps,
+  headers: HeaderReader,
+  body: Record<string, unknown>,
+): Promise<{ next: string; recoveryFor: string | null }> {
+  await enforceLimit("confirm", clientKey(headers), { max: 20, windowSeconds: 600 });
+
+  const expired = new AccountError(
+    400,
+    "El enlace no es válido, ha caducado o ya se ha usado. Solicita uno nuevo.",
+    { code: "link_expired" },
+  );
+  const text = (value: unknown) =>
+    typeof value === "string" && value.length > 0 && value.length <= 300 ? value : null;
+  const type = text(body.type) as OtpType | null;
+  const tokenHash = text(body.tokenHash);
+  const code = text(body.code);
+  const next = safeNextPath(text(body.next));
+  let result: AuthResult;
+  let recovery: boolean;
+
+  if (tokenHash && type && ["email", "signup", "recovery", "email_change"].includes(type)) {
+    result = await deps.auth.verifyLink(type, tokenHash);
+    recovery = type === "recovery";
+  } else if (code) {
+    result = await deps.auth.exchangeCode(code);
+    // Con `code` Supabase no dice de qué correo viene: lo indica el destino
+    // que nosotros mismos pusimos al pedir la recuperación.
+    recovery = next === RECOVERY_PATH;
+  } else {
+    throw expired;
+  }
+
+  if (!result.ok) {
+    if (result.reason === "invalid_link" || result.reason === "invalid_credentials") throw expired;
+    assertOk(result);
+  }
+
+  const user = await deps.auth.getUser();
+  if (!user) throw expired;
+
+  return {
+    next: recovery ? RECOVERY_PATH : next,
+    recoveryFor: recovery ? user.id : null,
+  };
 }
 
 /** Contraseña nueva. Con `currentPassword` desde ajustes; sin ella tras un enlace de recuperación. */
@@ -187,6 +272,16 @@ export async function changePassword(
 
   if (options.requireCurrent) {
     const current = typeof body.currentPassword === "string" ? body.currentPassword : "";
+
+    // Viene de la pantalla de recuperación, pero el pase de 15 minutos ya
+    // no es válido: hay que pedir otro enlace, no «la contraseña actual».
+    if (!current && body.recovery === true) {
+      throw new AccountError(
+        400,
+        "El enlace de recuperación ha caducado. Solicita uno nuevo para cambiar la contraseña.",
+        { code: "recovery_expired" },
+      );
+    }
 
     if (!current || !(await deps.auth.verifyPassword(user.email, current))) {
       throw new AccountError(400, "La contraseña actual no es correcta.");
@@ -266,8 +361,25 @@ export async function deleteAccount(
 export type AccountOverview = {
   user: { email: string; pendingEmail: string | null };
   profile: { displayName: string | null; createdAt: string | null };
-  plan: { id: string; label: string; monthlyAudits: number; historySize: number };
-  usage: { used: number; remaining: number; periodStart: string; periodEnd: string };
+  plan: {
+    id: string;
+    label: string;
+    auditsPerWindow: number;
+    windowDays: number;
+    historySize: number;
+  };
+  /**
+   * Consumo en la ventana móvil. Las fechas son ISO 8601 en UTC; la
+   * interfaz las muestra en la zona horaria del usuario.
+   */
+  usage: {
+    used: number;
+    limit: number;
+    remaining: number;
+    windowDays: number;
+    nextReleaseAt: string | null;
+    availableAt: string | null;
+  };
 };
 
 export async function overview(deps: AccountDeps, user: SessionUser): Promise<AccountOverview> {
@@ -294,14 +406,17 @@ export async function overview(deps: AccountDeps, user: SessionUser): Promise<Ac
     plan: {
       id: plan.plan,
       label: plan.label,
-      monthlyAudits: plan.monthlyAudits,
+      auditsPerWindow: plan.auditsPerWindow,
+      windowDays: QUOTA_WINDOW_DAYS,
       historySize: plan.historySize,
     },
     usage: {
       used: usage.used,
-      remaining: Math.max(0, plan.monthlyAudits - usage.used),
-      periodStart: usage.periodStart,
-      periodEnd: usage.periodEnd,
+      limit: plan.auditsPerWindow,
+      remaining: Math.max(0, plan.auditsPerWindow - usage.used),
+      windowDays: QUOTA_WINDOW_DAYS,
+      nextReleaseAt: usage.nextReleaseAt,
+      availableAt: usage.availableAt,
     },
   };
 }

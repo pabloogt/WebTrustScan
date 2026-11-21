@@ -10,7 +10,7 @@ import { POST as login } from "@/app/api/auth/login/route";
 import { POST as logout } from "@/app/api/auth/logout/route";
 import { POST as recover } from "@/app/api/auth/recover/route";
 import { POST as register } from "@/app/api/auth/register/route";
-import { GET as confirm } from "@/app/auth/confirm/route";
+import { POST as confirm } from "@/app/api/auth/confirm/route";
 import { RECOVERY_COOKIE, createRecoveryTicket, verifyRecoveryTicket } from "@/lib/accounts/analyze";
 import { safeNextPath } from "@/lib/accounts/http";
 import { pseudonym, resetLimitsForTests } from "@/lib/limits";
@@ -42,8 +42,17 @@ beforeEach(() => {
 const lastMail = (to: string, type: Mail["type"]) =>
   [...env.outbox].reverse().find((mail) => mail.to === to && mail.type === type) as Mail;
 
-const open = (mail: Mail, extra = "") =>
-  call(confirm, { path: `/auth/confirm?token_hash=${mail.tokenHash}&type=${mail.type}${extra}` });
+/**
+ * Pulsar «Continuar» en /auth/confirm tras abrir el enlace del correo. La
+ * página no canjea nada por sí sola: lo hace esta petición POST.
+ */
+const open = (mail: Mail, next?: string) =>
+  call(confirm, { method: "POST", body: { tokenHash: mail.tokenHash, type: mail.type, next } });
+
+const EXPIRED = {
+  error: "El enlace no es válido, ha caducado o ya se ha usado. Solicita uno nuevo.",
+  code: "link_expired",
+};
 
 /** Alta + confirmación de correo. Devuelve el identificador del usuario. */
 async function signUp(email: string, password = PASSWORD): Promise<string> {
@@ -90,17 +99,17 @@ describe("registro", () => {
   });
 
   it("confirmar el correo abre sesión y deja creados perfil, espacio y plan Free", async () => {
-    const response = await open(lastMail("nueva@ejemplo.test", "email"), "&next=/panel");
+    const response = await open(lastMail("nueva@ejemplo.test", "email"), "/panel");
 
-    expect(response.status).toBe(307);
-    expect(response.response.headers.get("location")).toBe("http://localhost/panel");
+    expect(response.status).toBe(200);
+    expect(response.data).toEqual({ next: "/panel" });
 
     const account = await call(accountRoute);
     expect(account.status).toBe(200);
     expect(account.data).toMatchObject({
       user: { email: "nueva@ejemplo.test" },
-      plan: { id: "free", monthlyAudits: 5, historySize: 10 },
-      usage: { used: 0, remaining: 5 },
+      plan: { id: "free", auditsPerWindow: 5, windowDays: 7, historySize: 10 },
+      usage: { used: 0, limit: 5, remaining: 5, windowDays: 7, nextReleaseAt: null, availableAt: null },
     });
   });
 
@@ -144,31 +153,37 @@ describe("enlaces de correo", () => {
     await call(register, { method: "POST", body: { email: "unavez@ejemplo.test", password: PASSWORD } });
     const mail = lastMail("unavez@ejemplo.test", "email");
 
-    expect((await open(mail)).response.headers.get("location")).toBe("http://localhost/panel");
+    expect((await open(mail)).data).toEqual({ next: "/panel" });
     env.session.userId = null;
 
     const again = await open(mail);
-    expect(again.response.headers.get("location")).toBe("http://localhost/acceso?estado=enlace-no-valido");
+    expect(again.status).toBe(400);
+    expect(again.data).toEqual(EXPIRED);
     expect(env.session.userId).toBeNull();
   });
 
   it("un enlace caducado, inventado o de otro tipo no abre sesión", async () => {
     await call(register, { method: "POST", body: { email: "caduca@ejemplo.test", password: PASSWORD } });
     const mail = lastMail("caduca@ejemplo.test", "email");
-    const failed = "http://localhost/acceso?estado=enlace-no-valido";
 
     env.now.value += 2 * 3_600_000;
-    expect((await open(mail)).response.headers.get("location")).toBe(failed);
+    expect((await open(mail)).data).toEqual(EXPIRED);
     env.now.value = Date.now();
 
-    for (const path of [
-      "/auth/confirm?token_hash=inventado&type=email",
-      `/auth/confirm?token_hash=${mail.tokenHash}&type=recovery`,
-      `/auth/confirm?token_hash=${mail.tokenHash}&type=magiclink`,
-      "/auth/confirm?type=email",
-      `/auth/confirm?token_hash=${"a".repeat(500)}&type=email`,
+    for (const body of [
+      { tokenHash: "inventado", type: "email" },
+      { tokenHash: mail.tokenHash, type: "recovery" },
+      { tokenHash: mail.tokenHash, type: "magiclink" },
+      { type: "email" },
+      { tokenHash: "a".repeat(500), type: "email" },
+      { code: "inventado" },
+      { tokenHash: ["x"], type: "email" },
+      {},
     ]) {
-      expect((await call(confirm, { path })).response.headers.get("location"), path).toBe(failed);
+      const result = await call(confirm, { method: "POST", body });
+      expect(result.status, JSON.stringify(body)).toBe(400);
+      expect(result.data).toEqual(EXPIRED);
+      expect(result.response.headers.get("set-cookie")).toBeNull();
     }
     expect(env.session.userId).toBeNull();
   });
@@ -187,8 +202,31 @@ describe("enlaces de correo", () => {
     }
 
     await call(register, { method: "POST", body: { email: "redir@ejemplo.test", password: PASSWORD } });
-    const response = await open(lastMail("redir@ejemplo.test", "email"), "&next=https://malicioso.example");
-    expect(response.response.headers.get("location")).toBe("http://localhost/panel");
+    const response = await open(lastMail("redir@ejemplo.test", "email"), "https://malicioso.example");
+    expect(response.data).toEqual({ next: "/panel" });
+  });
+
+  it("canjear el enlace exige mismo origen: abrirlo desde otra web no lo gasta", async () => {
+    await call(register, { method: "POST", body: { email: "origen@ejemplo.test", password: PASSWORD } });
+    const mail = lastMail("origen@ejemplo.test", "email");
+    const body = { tokenHash: mail.tokenHash, type: mail.type };
+
+    expect((await call(confirm, { method: "POST", body, origin: "https://otra.example" })).status).toBe(403);
+    expect((await call(confirm, { method: "POST", body, origin: null })).status).toBe(403);
+    expect(mail.used).toBe(false);
+    expect((await call(confirm, { method: "POST", body })).data).toEqual({ next: "/panel" });
+  });
+
+  it("acepta también el enlace predeterminado de Supabase (?code=, flujo PKCE)", async () => {
+    await call(register, { method: "POST", body: { email: "pkce@ejemplo.test", password: PASSWORD } });
+    const mail = lastMail("pkce@ejemplo.test", "email");
+    const result = await call(confirm, { method: "POST", body: { code: mail.tokenHash, next: "/panel" } });
+
+    expect(result.status).toBe(200);
+    expect(result.data).toEqual({ next: "/panel" });
+    // Con `code` y destino normal no se concede pase de recuperación.
+    expect(result.response.headers.get("set-cookie")).toBeNull();
+    expect(env.session.userId).toBe(mail.userId);
   });
 });
 
@@ -274,7 +312,7 @@ describe("acceso y sesión", () => {
     const evil = "https://sitio-malicioso.example";
 
     for (const [handler, method] of [
-      [login, "POST"], [register, "POST"], [recover, "POST"], [logout, "POST"],
+      [login, "POST"], [register, "POST"], [recover, "POST"], [logout, "POST"], [confirm, "POST"],
       [passwordRoute, "POST"], [emailRoute, "POST"], [deleteRoute, "POST"], [profileRoute, "PATCH"],
     ] as const) {
       expect((await call(handler, { method, body: {}, origin: evil })).status).toBe(403);
@@ -301,9 +339,12 @@ describe("recuperación y cambio de contraseña", () => {
 
   it("el enlace lleva a fijar una contraseña nueva sin pedir la anterior, una sola vez", async () => {
     await call(recover, { method: "POST", body: { email: "ana@ejemplo.test" } });
-    const response = await open(lastMail("ana@ejemplo.test", "recovery"));
+    const mail = lastMail("ana@ejemplo.test", "recovery");
+    expect(mail.redirectTo).toBe("http://localhost:3000/auth/confirm?next=%2Fcuenta%2Fnueva-contrasena");
+    // Aunque el enlace diga otra cosa, la recuperación siempre lleva a fijar la contraseña.
+    const response = await open(mail, "/panel");
 
-    expect(response.response.headers.get("location")).toBe("http://localhost/cuenta/nueva-contrasena");
+    expect(response.data).toEqual({ next: "/cuenta/nueva-contrasena" });
     const cookie = response.response.headers.get("set-cookie") ?? "";
     expect(cookie).toMatch(new RegExp(`^${RECOVERY_COOKIE}=`));
     expect(cookie).toMatch(/HttpOnly/i);
@@ -325,18 +366,99 @@ describe("recuperación y cambio de contraseña", () => {
     expect(env.events.some((event) => event.type === "password_changed")).toBe(true);
   });
 
-  it("limita las solicitudes de recuperación por cuenta sin delatarlo", async () => {
-    resetLimitsForTests();
-    const sent = env.outbox.length;
-    const responses = [];
-    for (let i = 0; i < 5; i += 1) {
-      responses.push(await call(recover, { method: "POST", body: { email: "ana@ejemplo.test" } }));
-    }
+  it("el enlace predeterminado de Supabase (?code=) también concede el pase de recuperación", async () => {
+    await call(recover, { method: "POST", body: { email: "ana@ejemplo.test" } });
+    const mail = lastMail("ana@ejemplo.test", "recovery");
+    const result = await call(confirm, {
+      method: "POST",
+      body: { code: mail.tokenHash, next: "/cuenta/nueva-contrasena" },
+    });
 
-    expect(responses.map((r) => r.status)).toEqual([200, 200, 200, 200, 200]);
-    expect(new Set(responses.map((r) => JSON.stringify(r.data))).size).toBe(1);
-    // Solo se envían 3 correos; los demás se responden igual pero no salen.
-    expect(env.outbox.length - sent).toBe(3);
+    expect(result.data).toEqual({ next: "/cuenta/nueva-contrasena" });
+    expect(result.response.headers.get("set-cookie")).toMatch(new RegExp(`^${RECOVERY_COOKIE}=`));
+    env.session.userId = null;
+  });
+
+  it("un enlace de recuperación ya usado o caducado se rechaza con un mensaje claro", async () => {
+    await call(recover, { method: "POST", body: { email: "ana@ejemplo.test" } });
+    const mail = lastMail("ana@ejemplo.test", "recovery");
+
+    env.now.value += 3_600_001; // una hora y un milisegundo
+    const late = await open(mail);
+    expect(late.status).toBe(400);
+    expect(late.data).toEqual(EXPIRED);
+    expect(late.response.headers.get("set-cookie")).toBeNull();
+    expect(env.session.userId).toBeNull();
+  });
+
+  it("entre dos correos a la misma cuenta hay que esperar 60 segundos, sin delatarlo", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() });
+    try {
+      resetLimitsForTests();
+      const sent = env.outbox.length;
+      const ask = (email = "ana@ejemplo.test") =>
+        call(recover, { method: "POST", body: { email } });
+
+      const first = await ask();
+      expect(first.status).toBe(200);
+      expect(first.data.retryAfterSeconds).toBe(60);
+      expect(env.outbox.length - sent).toBe(1);
+
+      // Dentro del minuto: misma respuesta, pero no sale ningún correo.
+      vi.advanceTimersByTime(30_000);
+      const early = await ask();
+      expect(early.data).toEqual(first.data);
+      expect(env.outbox.length - sent).toBe(1);
+      expect(env.events.at(-1)).toMatchObject({ type: "recovery_not_sent", metadata: { reason: "cooldown_60s" } });
+
+      // Pasado el minuto sí se envía otro.
+      vi.advanceTimersByTime(31_000);
+      await ask();
+      expect(env.outbox.length - sent).toBe(2);
+      // La espera es por cuenta: otra dirección no espera.
+      expect((await ask("nadie@ejemplo.test")).data).toEqual(first.data);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("limita las solicitudes de recuperación por hora sin delatarlo", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() });
+    try {
+      resetLimitsForTests();
+      const sent = env.outbox.length;
+      const responses = [];
+      for (let i = 0; i < 5; i += 1) {
+        responses.push(await call(recover, { method: "POST", body: { email: "ana@ejemplo.test" } }));
+        vi.advanceTimersByTime(61_000);
+      }
+
+      expect(responses.map((r) => r.status)).toEqual([200, 200, 200, 200, 200]);
+      expect(new Set(responses.map((r) => JSON.stringify(r.data))).size).toBe(1);
+      // Solo se envían 3 correos por hora; los demás se responden igual pero no salen.
+      expect(env.outbox.length - sent).toBe(3);
+      expect(env.events.at(-1)).toMatchObject({ metadata: { reason: "app_hourly_limit" } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("si el proveedor rechaza el envío, se registra el motivo y la respuesta no cambia", async () => {
+    resetLimitsForTests();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    env.resetFailure = { ok: false, reason: "rate_limited", code: "over_email_send_rate_limit" };
+
+    const result = await call(recover, { method: "POST", body: { email: "ana@ejemplo.test" } });
+
+    expect(result.status).toBe(200);
+    expect(result.data.message).toMatch(/Si existe una cuenta/);
+    expect(env.events.at(-1)).toMatchObject({
+      type: "recovery_not_sent",
+      metadata: { reason: "provider:over_email_send_rate_limit" },
+    });
+    // El log lleva el motivo, nunca la dirección.
+    expect(JSON.stringify(warn.mock.calls)).not.toMatch(/ana@ejemplo/);
+    warn.mockRestore();
   });
 
   it("sin pase de recuperación válido hace falta la contraseña actual", async () => {
@@ -355,6 +477,17 @@ describe("recuperación y cambio de contraseña", () => {
       expect(result.status).toBe(400);
       expect(result.data.error).toBe("La contraseña actual no es correcta.");
     }
+
+    // Desde la pantalla de recuperación con el pase caducado, el mensaje lo dice
+    // y remite a pedir otro enlace (no pide «la contraseña actual»).
+    const late = await call(passwordRoute, {
+      method: "POST",
+      body: { password: "robada-por-un-intruso", recovery: true },
+      cookie: `${RECOVERY_COOKIE}=${createRecoveryTicket(userId, Date.now() - 16 * 60_000)}`,
+    });
+    expect(late.status).toBe(400);
+    expect(late.data).toMatchObject({ code: "recovery_expired" });
+    expect(late.data.error).toMatch(/ha caducado. Solicita uno nuevo/);
 
     expect(verifyRecoveryTicket(createRecoveryTicket(userId), userId)).toBe(true);
     expect(verifyRecoveryTicket(undefined, userId)).toBe(false);
@@ -476,7 +609,7 @@ describe("datos de la cuenta", () => {
     });
 
     const account = await call(accountRoute);
-    expect(account.data.plan).toMatchObject({ id: "free", monthlyAudits: 5 });
+    expect(account.data.plan).toMatchObject({ id: "free", auditsPerWindow: 5 });
     expect(account.data.usage).toMatchObject({ used: 1, remaining: 4 });
     expect(await env.db.sql("select 1 from public.app_admins where user_id = $1", [bob])).toEqual([]);
   });
@@ -489,8 +622,8 @@ describe("datos de la cuenta", () => {
     env.session.userId = bob;
 
     expect((await call(accountRoute)).data).toMatchObject({
-      plan: { id: "pro", label: "Pro", monthlyAudits: 100, historySize: 100 },
-      usage: { used: 1, remaining: 99 },
+      plan: { id: "pro", label: "Pro", auditsPerWindow: 25, historySize: 50 },
+      usage: { used: 1, limit: 25, remaining: 24 },
     });
   });
 
@@ -509,9 +642,9 @@ describe("datos de la cuenta", () => {
       const column = table === "profiles" ? "id" : table === "workspaces" ? "owner_id" : "user_id";
       expect(await env.db.sql(`select 1 from public.${table} where ${column} = $1`, [alice]), table).toEqual([]);
     }
-    // Queda solo el consumo del periodo, bajo un HMAC del correo.
-    const carry = await env.db.sql<{ email_hash: string; used: number }>("select email_hash, used from public.usage_carryover");
-    expect(carry).toEqual([{ email_hash: pseudonym("email", "alice@datos.test"), used: 1 }]);
+    // Queda solo la fecha de cada uso que aún cuenta, bajo un HMAC del correo.
+    const carry = await env.db.sql<{ email_hash: string }>("select email_hash from public.usage_carryover_events");
+    expect(carry).toEqual([{ email_hash: pseudonym("email", "alice@datos.test") }]);
     expect(JSON.stringify(carry)).not.toContain("alice");
     // Los datos de Bob siguen intactos.
     env.session.userId = bob;
@@ -532,7 +665,7 @@ describe("datos de la cuenta", () => {
 
     expect(rows.length).toBeGreaterThan(5);
     expect(new Set(rows.map((row) => row.type))).toEqual(
-      new Set(["register_requested", "login_failed", "recovery_requested", "password_changed", "email_change_requested", "account_deleted"]),
+      new Set(["register_requested", "login_failed", "recovery_not_sent", "recovery_requested", "password_changed", "email_change_requested", "account_deleted"]),
     );
     for (const row of rows) expect(row.ip_hash).toMatch(/^[0-9a-f]{64}$/);
     expect(JSON.stringify(rows)).not.toMatch(/@|127\.0\.0\.1|198\.51/);

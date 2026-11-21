@@ -60,7 +60,7 @@ describe("RLS · cada usuario ve solo lo suyo", () => {
         where n.nspname = 'public' and c.relkind = 'r' order by 1`,
     );
 
-    expect(tables.length).toBe(10);
+    expect(tables.length).toBe(11);
     expect(tables.filter((table) => !table.relrowsecurity)).toEqual([]);
   });
 
@@ -172,6 +172,9 @@ describe("RLS · plan, rol y consumo no son modificables por el usuario", () => 
       `insert into public.usage_events (workspace_id, request_id, period_start, status) values ('${wsBob}', gen_random_uuid(), now(), 'released')`,
       "delete from public.usage_carryover",
       "select * from public.usage_carryover",
+      "select * from public.usage_carryover_events",
+      "delete from public.usage_carryover_events",
+      `insert into public.usage_carryover_events (email_hash, used_at) values ('${"a".repeat(64)}', now())`,
     ]) {
       expect(await denied(asBob((sql) => sql(statement))), statement).toBe(DENIED);
     }
@@ -185,6 +188,12 @@ describe("RLS · plan, rol y consumo no son modificables por el usuario", () => 
       `select public.workspace_usage('${alice}')`,
       `select public.record_account_deletion('${alice}', repeat('a', 64))`,
       `select public.purge_security_events()`,
+      // Funciones de la ventana móvil de 7 días.
+      `select public.reserve_audit_rolling('${bob}', gen_random_uuid(), '{"free": 999999}'::jsonb, 7, 99)`,
+      `select public.workspace_usage_rolling('${alice}', '{"free": 5, "pro": 25}'::jsonb, 7)`,
+      `select public.record_account_deletion_rolling('${alice}', repeat('a', 64), 7)`,
+      `select public.rolling_usage(gen_random_uuid(), null, now(), interval '7 days', 5)`,
+      `select public.quota_window(7)`,
     ]) {
       expect(await denied(asBob((sql) => sql(call))), call).toBe(DENIED);
     }
@@ -229,7 +238,8 @@ describe("RLS · sin sesión y servidor", () => {
   it("un visitante sin sesión no puede leer ni escribir ninguna tabla", async () => {
     for (const table of [
       "profiles", "workspaces", "workspace_members", "subscriptions", "audits",
-      "usage_events", "usage_carryover", "app_admins", "security_events", "billing_webhook_events",
+      "usage_events", "usage_carryover", "usage_carryover_events", "app_admins", "security_events",
+      "billing_webhook_events",
     ]) {
       expect(await denied(db.asAnon((sql) => sql(`select * from public.${table}`))), table).toBe(DENIED);
     }
